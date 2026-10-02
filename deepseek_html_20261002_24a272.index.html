@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>KYIV OSINT RADAR v14.42.0</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+:root{
+  --bg:#0a0f14;--panel:rgba(14,20,26,.94);--panel-solid:#0e141a;
+  --text:#e8f0f5;--muted:#8fa5b2;--accent:#3b82f6;--danger:#dc2626;--ok:#35d07f;
+  --border:rgba(120,140,160,.18);
+  --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;width:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0a0f14;color:var(--text);-webkit-tap-highlight-color:transparent}
+#app{position:absolute;inset:0;display:flex;flex-direction:column}
+
+/* HEADER */
+.header{height:52px;background:#0a0f14;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 14px;padding-top:var(--safe-top);z-index:1000;flex:0 0 auto;font-size:13px}
+.logo{font-weight:800;letter-spacing:.14em;font-size:14px;display:flex;align-items:center;gap:9px;white-space:nowrap;color:#fff;text-transform:uppercase}
+.header-right{display:flex;align-items:center;gap:10px}
+.status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:800;letter-spacing:.08em}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);transition:background .3s,box-shadow .3s}
+.status-dot.err{background:#ef4444;box-shadow:0 0 8px #ef4444}
+.status-dot.warn{background:#f59e0b;box-shadow:0 0 8px #f59e0b}
+
+/* REGION PLATE */
+.region-plate{position:absolute;left:14px;top:calc(52px + var(--safe-top) + 10px);z-index:950;color:#cbd5e1;font-size:12px;font-weight:700;letter-spacing:.10em;text-transform:uppercase;padding-bottom:8px;border-bottom:2px solid rgba(200,210,220,.35);pointer-events:none;user-select:none}
+
+/* MAP */
+#map{flex:1;min-height:0;width:100%;background:#0a0f14}
+.leaflet-tile{filter:brightness(.95) contrast(1.05) saturate(.9)}
+
+/* TOP ALERT */
+.top-alert{position:absolute;top:calc(52px + var(--safe-top) + 10px);left:14px;right:14px;z-index:4600;border-radius:10px;overflow:hidden;display:none;box-shadow:0 8px 28px rgba(0,0,0,.6);backdrop-filter:blur(10px)}
+.top-alert.show{display:block;animation:alertIn .3s ease-out}
+@keyframes alertIn{from{transform:translateY(-8px);opacity:0}to{transform:translateY(0);opacity:1}}
+.top-alert.ballistic{background:linear-gradient(90deg,#7f1d1d,#dc2626,#7f1d1d);color:#fff;animation:bbPulse .6s ease-in-out infinite;border:1px solid #fca5a5}
+@keyframes bbPulse{0%,100%{background:linear-gradient(90deg,#7f1d1d,#dc2626,#7f1d1d)}50%{background:linear-gradient(90deg,#dc2626,#fca5a5,#dc2626)}}
+.top-alert.impact{background:linear-gradient(90deg,#7c2d12,#ea580c,#7c2d12);color:#fff;border:1px solid #fdba74}
+.top-alert.falling{background:linear-gradient(90deg,#78350f,#f59e0b,#78350f);color:#fff;border:1px solid #fcd34d}
+.top-alert.shot{background:linear-gradient(90deg,#14532d,#16a34a,#14532d);color:#fff;border:1px solid #86efac}
+.top-alert.fire{background:linear-gradient(90deg,#7c2d12,#f97316,#7c2d12);color:#fff;border:1px solid #fdba74}
+.top-alert.strategic{background:linear-gradient(90deg,#78350f,#facc15,#78350f);color:#1f2937;border:1px solid #fde047;animation:none}
+.top-alert.mass{background:linear-gradient(90deg,#4c1d95,#7c3aed,#4c1d95);color:#fff;border:1px solid #c4b5fd;animation:massPulse 1.2s ease-in-out infinite}
+@keyframes massPulse{0%,100%{background:linear-gradient(90deg,#4c1d95,#7c3aed,#4c1d95)}50%{background:linear-gradient(90deg,#7c3aed,#a78bfa,#7c3aed)}}
+.top-alert-inner{padding:9px 34px 9px 12px;display:flex;align-items:center;gap:10px;font-weight:800;font-size:.86rem;line-height:1.25}
+.top-alert-icon{font-size:1.4rem;flex-shrink:0;line-height:1}
+.top-alert-body{flex:1;min-width:0}
+.top-alert-title{font-weight:800;font-size:.86rem;letter-spacing:.02em;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.top-alert-place{font-size:.78rem;font-weight:700;margin-top:2px;opacity:.95;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.top-alert-meta{font-size:.68rem;font-weight:700;opacity:.85;margin-top:2px;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.top-alert-close{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.25);border:0;color:#fff;width:22px;height:22px;border-radius:50%;font-size:1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0}
+.top-alert.strategic .top-alert-close{color:#1f2937;background:rgba(255,255,255,.4)}
+.top-alert-close:active{background:rgba(0,0,0,.5)}
+
+/* STRATEGIC PANEL */
+.strategic-panel{position:absolute;top:calc(52px + var(--safe-top) + 10px);left:14px;right:14px;z-index:4550;background:var(--panel-solid);border:1px solid rgba(250,204,21,.5);border-radius:10px;padding:8px 12px;display:none;box-shadow:0 8px 28px rgba(0,0,0,.6);font-size:.72rem;max-height:30vh;overflow-y:auto}
+.strategic-panel.show{display:block}
+.strategic-panel-title{font-weight:800;color:#facc15;margin-bottom:6px;font-size:.78rem;letter-spacing:.03em;display:flex;justify-content:space-between;align-items:center}
+.strategic-panel-close{background:0;border:0;color:#facc15;font-size:1.1rem;cursor:pointer;padding:0 4px;line-height:1}
+.strategic-panel-item{color:#e2e8f0;padding:3px 0;border-bottom:1px solid rgba(148,163,184,.15);display:flex;align-items:flex-start;gap:6px}
+.strategic-panel-item:last-child{border-bottom:0}
+.strategic-panel-item .s-ico{flex-shrink:0}
+.strategic-panel-item .s-text{flex:1;min-width:0}
+.strategic-panel-item .s-eta{color:#fbbf24;font-weight:700;font-size:.68rem}
+.strategic-panel-summary{color:#fca5a5;font-weight:800;margin-top:6px;padding-top:6px;border-top:1px solid rgba(220,38,38,.4);font-size:.7rem}
+
+/* MASS BANNER */
+.mass-banner{position:absolute;top:calc(52px + var(--safe-top) + 10px);left:14px;right:14px;z-index:4620;border-radius:10px;overflow:hidden;display:none;box-shadow:0 8px 28px rgba(0,0,0,.6);background:linear-gradient(135deg,#4c1d95,#7c3aed,#4c1d95);border:1px solid #c4b5fd;color:#fff}
+.mass-banner.show{display:block;animation:alertIn .3s ease-out}
+.mass-banner-inner{padding:10px 34px 10px 12px;display:flex;align-items:flex-start;gap:10px;font-weight:700;font-size:.8rem;line-height:1.35}
+.mass-banner-icon{font-size:1.5rem;flex-shrink:0;line-height:1}
+.mass-banner-body{flex:1;min-width:0}
+.mass-banner-title{font-weight:800;font-size:.86rem;letter-spacing:.02em}
+.mass-banner-line{font-size:.74rem;font-weight:700;margin-top:3px;opacity:.95}
+.mass-banner-line b{color:#fde047}
+.mass-banner-close{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.3);border:0;color:#fff;width:22px;height:22px;border-radius:50%;font-size:1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0}
+
+/* FEED PANEL */
+.panel{position:absolute;left:14px;right:14px;bottom:calc(170px + var(--safe-bottom));background:var(--panel-solid);border:1px solid var(--border);border-left:4px solid #22c55e;border-radius:10px;overflow:hidden;z-index:900;display:flex;flex-direction:column;max-height:16vh;transition:max-height .2s ease;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.panel.collapsed{max-height:44px}
+.panel-header{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;height:44px;flex:0 0 44px}
+.panel-title{font-size:13px;font-weight:800;letter-spacing:.12em;display:flex;align-items:center;gap:7px;text-transform:uppercase;color:#e8f0f5}
+.panel-count{font-size:12px;color:var(--muted);font-weight:800;display:flex;align-items:center;gap:5px;letter-spacing:.06em}
+.panel-chev{font-size:.8rem;color:var(--muted);transition:transform .2s}
+.panel.collapsed .panel-chev{transform:rotate(-90deg)}
+.events{overflow-y:auto;flex:1;min-height:0}
+.event{padding:8px 12px;border-bottom:1px solid #132028;cursor:pointer;transition:background .12s}
+.event:hover{background:rgba(59,130,246,.08)}
+.event:last-child{border-bottom:0}
+.event-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.event-type{font-weight:700;font-size:12px;display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.event-icon{font-size:13px;line-height:1;flex-shrink:0}
+.event-prio{color:#fbbf24;font-size:11px;flex-shrink:0}
+.event-time{font-size:10px;color:var(--muted);flex-shrink:0;font-weight:700}
+.event-loc{margin-top:2px;font-size:11px;color:#b7c8d2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.event-meta{margin-top:3px;display:flex;gap:3px;flex-wrap:wrap}
+.tag{padding:1px 5px;border-radius:4px;background:#132630;color:#8faab8;font-size:9px;font-weight:700;line-height:1.4}
+.tag.prio{background:rgba(251,191,36,.25);color:#fbbf24}
+.tag.stage-launch{background:rgba(220,38,38,.3);color:#fecaca}
+.tag.stage-impact{background:rgba(220,38,38,.4);color:#fecaca}
+.tag.speed{background:rgba(59,130,246,.3);color:#93c5fd}
+.tag.sim{background:rgba(168,85,247,.3);color:#d8b4fe}
+.tag.strategic{background:rgba(250,204,21,.3);color:#fde047}
+.tag.mass{background:rgba(124,58,237,.4);color:#ddd6fe}
+.panel-empty{padding:16px 12px;text-align:center;color:var(--muted);font-size:11px}
+
+/* HUD */
+.hud-bottom{position:absolute;bottom:var(--safe-bottom);left:0;right:0;z-index:1000;padding:0 10px 12px;pointer-events:none}
+.hud-bottom>*{pointer-events:auto}
+.btn-row{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:0}
+button{background:var(--panel-solid);border:1px solid var(--border);color:var(--text);padding:8px 4px;border-radius:10px;font-size:10px;line-height:1.15;cursor:pointer;font-weight:700;min-width:0;height:auto;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;flex:0 0 auto;touch-action:manipulation;letter-spacing:.02em;text-align:center;transition:background .15s,border-color .15s}
+button:active{background:#1a2632}
+button.danger{color:#fca5a5}
+button.map-toggle.on{background:rgba(37,99,235,.85);color:#fff}
+button.sound-btn.on{color:#4ade80}
+button.sound-btn.muted{color:#f87171}
+button.rings-btn.on{color:#60a5fa}
+button.rings-btn.off{color:#64748b}
+button.siren-btn{color:#f87171}
+button.siren-btn.active{background:#dc2626!important;color:#fff!important;animation:sirenFlash .35s ease-in-out infinite}
+button.strategic-btn.on{background:rgba(250,204,21,.85);color:#1f2937}
+button.infra-btn.on{background:rgba(34,197,94,.85);color:#fff}
+button.infra-btn.infrastructure{background:rgba(59,130,246,.85);color:#fff}
+button.infra-btn.energy{background:rgba(250,204,21,.9);color:#1f2937}
+button.infra-btn.incidents{background:rgba(220,38,38,.9);color:#fff}
+button.power-btn.on{background:rgba(250,204,21,.9);color:#1f2937}
+button.mass-btn.on{background:rgba(124,58,237,.9);color:#fff}
+@keyframes sirenFlash{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.8)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0)}}
+
+.dev-signature{position:absolute;bottom:calc(var(--safe-bottom) + 0px);left:0;right:0;text-align:center;font-size:10px;color:#5a6a78;font-weight:500;letter-spacing:.04em;pointer-events:none;z-index:999;font-family:ui-monospace,monospace;padding:2px 0}
+
+/* POPUP */
+.leaflet-popup-content-wrapper{background:var(--panel-solid);color:#e8f0f5;border-radius:10px;border:1px solid rgba(148,163,184,.3);box-shadow:0 6px 24px rgba(0,0,0,.6)}
+.leaflet-popup-tip{background:var(--panel-solid)}
+.leaflet-popup-content{margin:9px 11px;font-size:.75rem;line-height:1.4;max-width:250px}
+.leaflet-popup-close-button{color:#94a3b8!important;font-size:18px!important;padding:2px 6px!important}
+.popup-title{font-weight:700;font-size:.82rem;margin-bottom:4px;display:flex;align-items:center;gap:5px}
+.popup-meta{color:#94a3b8;font-size:.68rem}
+.type-uav{color:#f1f5f9}.type-missile,.type-ballistic{color:#f87171}.type-kab{color:#f87171}
+.type-fpv{color:#fbbf24}.type-recon{color:#7dd3fc}.type-mig31k{color:#fb7185}
+.type-jet_drone{color:#f87171}.type-strategic{color:#facc15;font-weight:800}
+.popup-guess{color:#fbbf24;font-size:.66rem;margin-top:4px}
+.popup-advisory{background:rgba(3,105,161,.35);color:#bae6fd;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.66rem;display:inline-block;margin-top:4px;border:1px solid rgba(125,211,252,.4)}
+.popup-area{background:rgba(71,85,105,.4);color:#cbd5e1;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.66rem;display:inline-block;margin-top:4px;border:1px solid rgba(148,163,184,.4)}
+.popup-infra{background:rgba(217,119,6,.35);color:#fcd34d;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.68rem;display:inline-block;margin-top:4px;border:1px solid rgba(251,191,36,.5);letter-spacing:.02em}
+.popup-chornobyl{background:rgba(168,85,247,.35);color:#e9d5ff;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.68rem;display:inline-block;margin-top:4px;border:1px solid rgba(216,180,254,.5)}
+.popup-alt{background:rgba(22,163,74,.25);color:#86efac;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.68rem;display:inline-block;margin-top:4px;border:1px solid rgba(134,239,172,.4)}
+.popup-channels{margin-top:6px;padding-top:5px;border-top:1px solid rgba(148,163,184,.18);font-size:.66rem}
+.popup-channels .ch{display:inline-block;background:rgba(148,163,184,.2);color:#cbd5e1;padding:1px 6px;border-radius:8px;margin:2px 2px 2px 0;border:1px solid rgba(148,163,184,.3)}
+.popup-channels .ch.trusted{background:rgba(22,163,74,.25);border-color:rgba(134,239,172,.4);color:#86efac}
+.popup-channels .ch.prio{background:rgba(251,191,36,.25);border-color:rgba(251,191,36,.5);color:#fbbf24}
+.popup-channels .ch.suspicious{background:rgba(220,38,38,.25);border-color:rgba(248,113,113,.4);color:#fca5a5}
+.popup-eta{background:rgba(220,38,38,.25);color:#fca5a5;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.68rem;display:inline-block;margin-top:4px;border:1px solid rgba(248,113,113,.4)}
+.popup-dist{background:rgba(59,130,246,.25);color:#93c5fd;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.68rem;display:inline-block;margin-top:4px;border:1px solid rgba(147,197,253,.4)}
+.popup-speed{background:rgba(234,88,12,.3);color:#fdba74;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.72rem;display:inline-block;margin-top:4px;border:1px solid rgba(253,186,116,.5);letter-spacing:.02em}
+.popup-sim{background:rgba(168,85,247,.3);color:#e9d5ff;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.66rem;display:inline-block;margin-top:4px;border:1px solid rgba(216,180,254,.5)}
+.popup-stale{background:rgba(217,119,6,.25);color:#fcd34d;padding:3px 6px;border-radius:5px;font-weight:700;font-size:.66rem;display:inline-block;margin-top:4px;border:1px solid rgba(251,191,36,.4)}
+.popup-exactname{background:rgba(220,38,38,.3);color:#fecaca;padding:3px 6px;border-radius:5px;font-weight:800;font-size:.72rem;display:inline-block;margin-top:4px;border:1px solid rgba(248,113,113,.5);letter-spacing:.02em}
+.popup-trail{margin-top:6px;padding:6px 8px;border-radius:5px;background:rgba(148,163,184,.12);border:1px dashed rgba(148,163,184,.5);font-size:.68rem;line-height:1.45;color:#cbd5e1}
+.popup-trail .pt-title{font-weight:700;color:#e2e8f0;margin-bottom:3px}
+.popup-trail .pt-point{display:flex;gap:5px;align-items:flex-start;margin:1px 0}
+.popup-trail .pt-num{flex-shrink:0;font-family:ui-monospace,monospace;color:#94a3b8;min-width:14px}
+.popup-trail .pt-place{flex:1;color:#e2e8f0}
+.popup-trail .pt-time{color:#94a3b8;font-size:.6rem;margin-left:3px}
+.popup-trail .pt-arrow{color:#fbbf24;font-weight:800}
+.popup-remove-btn{margin-top:8px;width:100%;height:30px;font-size:.75rem;background:rgba(220,38,38,.25);border:1px solid rgba(248,113,113,.5);color:#fca5a5;border-radius:6px;cursor:pointer;font-weight:800}
+.popup-remove-btn:active{background:rgba(220,38,38,.5)}
+
+/* THREAT ICONS */
+.threat-wrap{position:relative;width:28px;height:28px}
+.threat-rotate{position:absolute;inset:0;transform-origin:center center;will-change:transform}
+.threat-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 5px rgba(0,0,0,.5));transform-origin:center center;position:relative;animation:pulse 1.8s ease-in-out infinite;transition:filter .3s ease}
+.threat-icon svg{width:24px;height:24px;display:block}
+@keyframes pulse{0%,100%{filter:drop-shadow(0 0 3px rgba(0,0,0,.5));opacity:1}50%{filter:drop-shadow(0 0 8px rgba(59,130,246,.55));opacity:.92}}
+.threat-icon.confirm-2{filter:drop-shadow(0 0 7px rgba(34,197,94,.9))}
+.threat-icon.confirm-3{filter:drop-shadow(0 0 10px rgba(250,204,21,.95));animation:cPulse 1.3s ease-in-out infinite}
+.threat-icon.confirm-5{filter:drop-shadow(0 0 14px rgba(250,204,21,1));animation:cPulse 1s ease-in-out infinite}
+@keyframes cPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.threat-icon.falling{animation:fallingBlink .55s ease-in-out infinite}
+@keyframes fallingBlink{0%,100%{filter:drop-shadow(0 0 2px rgba(220,38,38,.9));opacity:1}50%{filter:drop-shadow(0 0 12px rgba(220,38,38,1));opacity:.35}}
+.threat-icon.falling svg path,.threat-icon.falling svg polygon,.threat-icon.falling svg rect{fill:#dc2626!important;stroke:#7f1d1d!important}
+.threat-icon.stale{opacity:.55;filter:grayscale(.4)}
+.threat-icon.threat-pulse{animation:threatPulse 1s ease-in-out infinite}
+@keyframes threatPulse{0%,100%{filter:drop-shadow(0 0 3px rgba(220,38,38,.9));opacity:1}50%{filter:drop-shadow(0 0 12px rgba(220,38,38,1));opacity:.55}}
+.threat-icon.strat-pulse{animation:stratIconPulse 1.8s ease-in-out infinite}
+@keyframes stratIconPulse{0%,100%{filter:drop-shadow(0 0 4px rgba(234,88,12,.8));opacity:1}50%{filter:drop-shadow(0 0 14px rgba(234,88,12,1));opacity:.7}}
+.threat-icon.uav-siren{animation:uavSirenPulse .7s ease-in-out infinite}
+@keyframes uavSirenPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 5px rgba(251,191,36,.95))}50%{transform:scale(1.18);filter:drop-shadow(0 0 16px rgba(251,191,36,1)) drop-shadow(0 0 5px rgba(220,38,38,.9))}}
+.threat-icon.ballistic-alarm{animation:ballisticAlarmPulse .5s ease-in-out infinite}
+@keyframes ballisticAlarmPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 6px rgba(220,38,38,1))}50%{transform:scale(1.2);filter:drop-shadow(0 0 16px rgba(220,38,38,1));opacity:.75}}
+.threat-icon.priority-star::after{content:"⭐";position:absolute;top:-10px;left:-6px;font-size:11px;filter:drop-shadow(0 0 3px rgba(251,191,36,1))}
+
+/* STRAT ICONS */
+.strat-wrap{position:relative}
+.strat-icon{width:32px;height:32px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 6px rgba(0,0,0,.6))}
+.strat-icon svg{width:28px;height:28px;display:block}
+.strat-icon.training{animation:stratTrain 2.5s ease-in-out infinite}
+.strat-icon.active{animation:stratActive 1.2s ease-in-out infinite}
+@keyframes stratTrain{0%,100%{opacity:.6;filter:drop-shadow(0 0 4px rgba(250,204,21,.7))}50%{opacity:1;filter:drop-shadow(0 0 12px rgba(250,204,21,1))}}
+@keyframes stratActive{0%,100%{filter:drop-shadow(0 0 6px rgba(250,204,21,.9))}50%{transform:scale(1.12);filter:drop-shadow(0 0 14px rgba(250,204,21,1))}}
+.strat-badge{position:absolute;right:-6px;top:-6px;height:14px;min-width:14px;padding:0 4px;border-radius:7px;background:#facc15;color:#1f2937;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;border:1px solid #fff}
+.strat-eta-badge{position:absolute;left:50%;bottom:-16px;transform:translateX(-50%);background:rgba(250,204,21,.95);color:#1f2937;font-size:9px;font-weight:800;padding:1px 5px;border-radius:6px;white-space:nowrap;border:1px solid #fff}
+.count-badge{position:absolute;right:-6px;top:-6px;height:14px;min-width:14px;padding:0 4px;border-radius:7px;background:#ea580c;color:#fff;font-size:9px;font-weight:900;display:flex;align-items:center;justify-content:center;border:1px solid #fff;z-index:5}
+.confirm-badge{position:absolute;left:-6px;top:-6px;height:13px;min-width:13px;padding:0 3px;border-radius:7px;background:#16a34a;color:#fff;font-size:8px;font-weight:900;display:flex;align-items:center;justify-content:center;border:1px solid #fff;z-index:5}
+.confirm-badge::before{content:"✓"}
+.confirm-badge.medium{background:#ca8a04}
+.confirm-badge.low{background:#dc2626}
+.confirm-badge.pending{background:#0ea5e9}
+
+/* IMPACT */
+.impact-marker-icon{width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;filter:drop-shadow(0 0 5px rgba(255,120,0,.95)) drop-shadow(0 0 2px rgba(220,38,38,1));animation:impactPop .9s ease-in-out infinite}
+@keyframes impactPop{0%,100%{transform:scale(1) rotate(0)}50%{transform:scale(1.18) rotate(6deg);opacity:.85}}
+.impact-marker{width:36px;height:36px;display:flex;align-items:center;justify-content:center;line-height:1;cursor:pointer}
+.impact-marker.hit{animation:impactHit 1s ease-in-out infinite;filter:drop-shadow(0 0 14px rgba(220,38,38,1))}
+.impact-marker.down{animation:impactDown 1.2s ease-in-out infinite}
+.impact-marker.shot{animation:impactShot 1.2s ease-in-out infinite;filter:drop-shadow(0 0 12px rgba(34,197,94,1))}
+.impact-marker.fire{animation:impactFire 1.1s ease-in-out infinite}
+.impact-marker.unknown{animation:impactUnknown 1.4s ease-in-out infinite}
+.impact-marker svg{width:32px;height:32px;display:block}
+@keyframes impactHit{0%,100%{transform:scale(1)}50%{transform:scale(1.25);opacity:.85}}
+@keyframes impactDown{0%,100%{transform:scale(1)}50%{transform:scale(1.15);opacity:.7}}
+@keyframes impactShot{0%,100%{transform:scale(1)}50%{transform:scale(1.18);opacity:.8}}
+@keyframes impactFire{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
+@keyframes impactUnknown{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.15);opacity:.7}}
+.arrival-unknown{width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#fbbf24;text-shadow:0 0 6px rgba(251,191,36,.9);animation:unknownPulse 1.2s ease-in-out infinite}
+@keyframes unknownPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.12);opacity:.7}}
+
+/* ERR/TOAST/AI */
+.err-banner{position:absolute;top:calc(52px + var(--safe-top));left:0;right:0;z-index:5000;background:#b91c1c;color:#fff;padding:8px 10px;font-size:.72rem;display:none}
+.err-banner.show{display:block}
+.err-banner b{font-weight:800}
+.err-banner .err-close{float:right;background:0;border:0;color:#fff;font-size:1.1rem;cursor:pointer;padding:0 4px;line-height:1}
+.toast{position:absolute;left:50%;top:calc(52px + var(--safe-top) + 60px);transform:translateX(-50%);z-index:2000;background:#0e141a;color:#f1f5f9;padding:8px 14px;border-radius:8px;border:1px solid rgba(148,163,184,.4);font-size:.74rem;box-shadow:0 6px 20px rgba(0,0,0,.5);opacity:0;transition:opacity .25s;pointer-events:none;max-width:85vw;text-align:center}
+.toast.show{opacity:1}
+.ai-badge{display:inline-block;font-size:9px;font-weight:800;padding:1px 6px;border-radius:5px;border:1px solid;margin-top:4px;letter-spacing:.02em;white-space:nowrap}
+.ai-modal-backdrop{position:fixed;inset:0;z-index:3000;background:rgba(5,10,16,.75);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:12px}
+.ai-modal-backdrop.show{display:flex}
+.ai-modal{background:#0e141a;color:#e2e8f0;border:1px solid rgba(148,163,184,.3);border-radius:12px;max-width:460px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column}
+.ai-modal-header{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid rgba(148,163,184,.2)}
+.ai-modal-title{flex:1;font-weight:700;font-size:.88rem}
+.ai-modal-close{background:0;border:0;color:#94a3b8;font-size:1.4rem;cursor:pointer;padding:0 4px}
+.ai-modal-body{padding:11px 13px;overflow-y:auto;font-size:.82rem;line-height:1.5;white-space:pre-wrap}
+.ai-modal-footer{padding:9px 13px;border-top:1px solid rgba(148,163,184,.2);display:flex;justify-content:space-between;align-items:center;font-size:.66rem;color:#94a3b8;gap:6px;flex-wrap:wrap}
+.ai-modal-footer button{font-size:.72rem;padding:5px 10px;min-width:auto;height:auto}
+
+/* LEAFLET */
+.alert-polygon{stroke-width:1.5;fill-opacity:.15}
+.leaflet-control-attribution{font-size:8px!important;background:rgba(10,15,20,.8)!important;color:#64748b!important;padding:2px 5px!important}
+.leaflet-control-zoom a{background:rgba(14,20,26,.9)!important;color:#e8f0f5!important;border-color:#1f3540!important;width:28px!important;height:28px!important;line-height:28px!important;font-size:15px!important}
+.leaflet-control-zoom{top:calc(52px + var(--safe-top) + 10px)!important;right:10px!important}
+
+/* SETTLEMENTS/INFRA */
+.settlement-marker{background:transparent;border:0}
+.settlement-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;border:1.5px solid #fff}
+.settlement-dot.city{background:#16a34a;width:11px;height:11px;border-width:2px}
+.settlement-dot.raion{background:#3b82f6;width:9px;height:9px}
+.infra-marker{background:transparent;border:0}
+.infra-bridge{width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;filter:drop-shadow(0 0 4px rgba(96,165,250,.9))}
+.infra-energy{width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;filter:drop-shadow(0 0 4px rgba(250,204,21,.9))}
+.infra-incident{width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;filter:drop-shadow(0 0 5px rgba(220,38,38,.95));animation:incPulse 1.6s ease-in-out infinite}
+@keyframes incPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+.infra-legend{position:absolute;bottom:calc(var(--safe-bottom) + 50px);right:6px;z-index:1050;background:rgba(10,15,20,.94);border:1px solid #1f3540;border-radius:8px;padding:6px 8px;font-size:9px;color:#cbd5e1;backdrop-filter:blur(10px);display:none;line-height:1.5}
+.infra-legend.show{display:block}
+.infra-legend b{color:#f1f5f9}
+.infra-legend .lg{display:flex;align-items:center;gap:4px;margin:1px 0}
+
+@media (min-width: 700px){
+  .panel{width:380px;left:14px;right:auto;bottom:calc(170px + var(--safe-bottom))}
+  .top-alert{left:14px;right:auto;width:420px}
+  .strategic-panel{width:420px;right:auto}
+  .mass-banner{left:14px;right:auto;width:420px}
+  .btn-row{max-width:600px;margin:0 auto}
+}
+@media (max-width: 380px){
+  button{font-size:9px;min-height:60px;padding:6px 2px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <div class="logo">
+      <svg width="22" height="26" viewBox="0 0 22 26" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+        <path d="M11 1 L21 4 L21 13 C21 19 16.5 23.5 11 25 C5.5 23.5 1 19 1 13 L1 4 Z" fill="#e8f0f5" stroke="#8fa5b2" stroke-width="1"/>
+        <path d="M11 4 L11 22 M6 9 L16 9 M11 6 L11 12" stroke="#0a0f14" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span>KYIV OSINT RADAR</span>
+    </div>
+    <div class="header-right">
+      <div class="status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">ЗАГРУЗКА…</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+  <div class="region-plate" id="regionPlate">КИЇВСЬКА ОБЛАСТЬ</div>
+
+  <div class="top-alert" id="topAlert">
+    <button class="top-alert-close" id="topAlertClose" aria-label="Закрити">×</button>
+    <div class="top-alert-inner">
+      <div class="top-alert-icon" id="topAlertIcon">🚨</div>
+      <div class="top-alert-body">
+        <div class="top-alert-title" id="topAlertTitle">—</div>
+        <div class="top-alert-place" id="topAlertPlace" style="display:none">—</div>
+        <div class="top-alert-meta" id="topAlertMeta" style="display:none">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mass-banner" id="massBanner">
+    <button class="mass-banner-close" id="massBannerClose" aria-label="Закрити">×</button>
+    <div class="mass-banner-inner">
+      <div class="mass-banner-icon" id="massBannerIcon">🚀</div>
+      <div class="mass-banner-body">
+        <div class="mass-banner-title" id="massBannerTitle">МАСОВАНА ЗАГРОЗА</div>
+        <div class="mass-banner-line" id="massBannerLine1">—</div>
+        <div class="mass-banner-line" id="massBannerLine2" style="display:none">—</div>
+        <div class="mass-banner-line" id="massBannerLine3" style="display:none">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strategic-panel" id="strategicPanel">
+    <div class="strategic-panel-title">
+      <span>✈️ СТРАТЕГІЧНА АКТИВНІСТЬ</span>
+      <button class="strategic-panel-close" id="strategicPanelClose">×</button>
+    </div>
+    <div id="strategicPanelBody"></div>
+  </div>
+
+  <div class="err-banner" id="errBanner">
+    <button class="err-close" onclick="this.parentNode.classList.remove('show')">×</button>
+    <b>Помилка:</b> <span id="errText">—</span>
+  </div>
+
+  <div class="panel collapsed" id="panel">
+    <div class="panel-header" id="panelHeader">
+      <div class="panel-title">▶ ЛЕНТА ПОДІЙ</div>
+      <div class="panel-count">
+        <span id="eventCount">0 подій</span>
+        <span class="panel-chev">▼</span>
+      </div>
+    </div>
+    <div class="events" id="events"></div>
+  </div>
+
+  <div class="hud-bottom">
+    <div class="btn-row">
+      <button type="button" id="btnRefresh" title="Оновити"><span style="font-size:22px">⟳</span><span>Оновити</span></button>
+      <button type="button" id="btnAIExplain" title="AI-аналіз"><span style="font-size:22px">🤖</span><span>AI аналіз</span></button>
+      <button type="button" id="btnColorToggle" title="Палітра"><span style="font-size:22px">🎨</span><span>Палітра</span></button>
+      <button type="button" class="rings-btn off" id="btnRingsToggle" title="Кільця"><span style="font-size:22px">🎯</span><span>Кільця</span></button>
+      <button type="button" class="settlements-btn" id="btnSettlements" title="Населені пункти"><span style="font-size:22px">🏘</span><span>Населені пункти</span></button>
+      <button type="button" class="infra-btn" id="btnInfra" title="Інфраструктура"><span style="font-size:22px">🏗</span><span>Інфраструктура</span></button>
+      <button type="button" class="power-btn" id="btnPower" title="Підстанції Києва"><span style="font-size:22px">⚡</span><span>Живлення</span></button>
+      <button type="button" class="sound-btn on" id="soundToggle" title="Звук"><span style="font-size:22px">🔔</span><span>Звук</span></button>
+      <button type="button" class="siren-btn" id="sirenBtn" title="Сирена"><span style="font-size:22px">🚨</span><span>Сирена</span></button>
+      <button type="button" class="strategic-btn" id="btnStrategic" title="Стратегічна авіація"><span style="font-size:22px">✈️</span><span>Стратегічна авіація</span></button>
+      <button type="button" class="mass-btn" id="btnMass" title="Масовані пуски"><span style="font-size:22px">🚀</span><span>Масовані пуски</span></button>
+      <button type="button" class="map-toggle" id="btnMapToggle" title="Схема/Супутник"><span style="font-size:22px">🛰</span><span>Супутникова карта</span></button>
+      <button type="button" id="btnClear" class="danger" title="Очистити"><span style="font-size:22px">✕</span><span>Очистити</span></button>
+    </div>
+  </div>
+
+  <div class="infra-legend" id="infraLegend">
+    <b>Інфраструктура:</b>
+    <div class="lg">🌉 Мости / путепроводи / естакади</div>
+    <div class="lg">⚡ Енергооб'єкти (ТЕЦ, ТЕС, ГЕС, ПС)</div>
+    <div class="lg">💥 Інциденти (БПЛА / КР / БР)</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="dev-signature">Розробник: А.Павленко 2026</div>
+
+  <div class="ai-modal-backdrop" id="aiModalBackdrop">
+    <div class="ai-modal">
+      <div class="ai-modal-header">
+        <span>🤖</span>
+        <span class="ai-modal-title">Зведення · AI Lite</span>
+        <button class="ai-modal-close" id="aiModalClose">×</button>
+      </div>
+      <div class="ai-modal-body" id="aiModalBody">—</div>
+      <div class="ai-modal-footer">
+        <span id="aiModalTime">—</span>
+        <button type="button" id="aiModalCopy">📋 Копіювати</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+/* ============================================================
+   KYIV OSINT RADAR v14.42.0
+   - тёмная тема (CARTO Dark Matter)
+   - три кольца: 250 / 500 / прицел
+   - HUD 2 ряда × 6
+   - только украинский
+============================================================ */
+const $=id=>document.getElementById(id);
+const esc=s=>(s||"").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+function showErr(m){try{const b=$("errBanner"),t=$("errText");if(b&&t){t.textContent=String(m||"?");b.classList.add("show");}console.error("[kyiv-radar]",m);}catch(e){}}
+window.addEventListener("error",e=>showErr(e.message));
+window.addEventListener("unhandledrejection",e=>{try{showErr(e.reason?.message||String(e.reason));}catch(x){}});
+
+/* ============================================================
+   ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+============================================================ */
+let lastBallisticAlarmAt=0,topAlertTimer=null,topAlertLastKind=null,lastAlerts=null,alertLayers=[];
+let ws=null,wsConnected=false,wsReconnectMs=3000,wsReconnectTimer=null;
+let restFallbackActive=false,pollTimer=null,abortCtrl=null;
+let rafId=null,animRunning=false,map=null,osmLayer=null,currentBase="osm";
+let ringsLayer=null,ringsVisible=true;
+let settlementsVisible=false,strategicVisible=false,infraMode=0;
+let powerLayer=null,powerVisible=false,highPrecisionOnly=false,uavColorIdx=0;
+let audioCtx=null,lastSoundAt=0,keepAliveInterval=null,sirenActiveTimeout=null;
+let feedUpdateTimer=null,settlementMarkers=[],infraMarkers=[];
+let massBannerTimer=null,massBannerActive=false;
+
+const CONFIG={
+  API_THREATS:"https://neptun.in.ua/api/v1/threats",API_ALERTS:"https://neptun.in.ua/api/v1/alerts",API_MESSAGES:"https://neptun.in.ua/api/v1/messages",WS_URL:"wss://neptun.in.ua/api/v1/stream",
+  POLL_MS:5000,WS_RECONNECT_MS:3000,WS_RECONNECT_MAX_MS:60000,
+  KYIV:[50.45,30.52],ZONE_RADIUS_KM:250,KYIV_OBLAST_RADIUS_KM:120,KYIV_OBLAST_CENTER:[50.45,30.52],
+  STALE_MSG_MS:5*60*1000,IMPACT_TTL_MS:30*60*1000,IMPACT_REPORT_TTL_MS:30*60*1000,
+  LAUNCHER_SOLO_TTL_MS:5*60*1000,MIN_CHANNELS_CONFIRM:2,
+  EXTRAPOLATION_HOURS:0.4,STALE_VISUAL_AFTER_HOURS:0.5,
+  MIG_SHOW_OUTSIDE_ZONE:true,STRAT_SHOW_OUTSIDE_ZONE:true,
+  TRAIL_MIN_ORIGIN_DIST_KM:30,UNCERTAIN_KM:15,
+  SIM_START_MIN_DIST_KM:30,SIM_START_DISTANCE_KM:320,
+  SIM_DISPLAY_TIME_FACTOR:0.75,SIM_MIN_DISPLAY_SECONDS:15,
+  SIM_DEFAULT_ORIGIN:{lat:51.73,lon:36.19,name:"Курськ"},
+  TILE_URL:"https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  TILE_URL_SAT:"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  TILE_URL_SAT_REF:"https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+  TILE_ATTR:'&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  TILE_ATTR_SAT:"Tiles &copy; Esri",APPROACH_OFFSET_KM:20,
+  FALLBACK_SPEED:{uav:180,recon:120,fpv:80,geran2:180,geran3:190,geran4:200,geran5:220,jet_drone:800,missile:900,ballistic:2100,banderol:700,kab:400,umpb:500,mig31k:900,awacs:700,strategic_aviation:800,unknown:150,zircon:2500},
+  SPEED_BY_HINT:{"герань-2":180,"герань-3":190,"герань-4":200,"герань-5":220,"реактивн":800,"шахед":180,"герань":180,"циркон":2500,"кинжал":12000,"искандер":2100,"калибр":890,"х-101":900,"х-555":900,"х-59":1050,"с-300":4200,"с-400":4800,"кн-23":2100,"оникс":3000,"s-8000":700,"бандероль":700,"умпб":500,"развед":130,"розвід":130,"fpv":100,"фпв":100},
+  ALTITUDE_CHANNELS:["chyste_nebo","chistenebo","чистенебо"],
+  SOUND_ENABLED:true,SOUND_NEAR_KM:25,SOUND_NEAR_KM_ROCKET:35,
+  SOUND_NEAR_WINDOW_MS:10000,SOUND_NEAR_WINDOW_MS_ROCKET:5000,SOUND_COOLDOWN_MS:4000,
+  SOUND_TYPE_FILTER:new Set(["uav","recon","geran5","missile","ballistic","banderol","jet_drone","kab","umpb","zircon","geran2","geran3","geran4"]),
+  ROCKET_TYPES:new Set(["missile","ballistic","banderol","jet_drone","kab","umpb","zircon"]),
+  ROCKET_ONLY_KYIV_OBLAST:false,
+  ROCKET_WARNING_TYPES:new Set(["missile","ballistic","banderol","jet_drone","kab","umpb","zircon"]),
+  TRAIL_MAX_AGE_MS:30*60*1000,TRAIL_MAX_GAP_KM:35,TRAIL_MAX_POINTS:12,
+  TRAIL_COLOR:"#dc2626",TRAIL_LINE_WIDTH:2,
+  BALLISTIC_SIREN_COOLDOWN_MS:2*60*1000,SMOOTH_ALPHA:0.4,
+  ARRIVAL_UNKNOWN_TTL_MS:3*60*1000,ARRIVAL_IMPACT_TTL_MS:60*1000,BALLISTIC_ARRIVAL_TTL_MS:60*1000,
+  HIGH_PREC_MIN_CONFIRM:2,
+  POPUP_OPTS:{maxWidth:280,maxHeight:300,autoPan:false,autoClose:true,closeOnClick:true,closeButton:true},
+  TOP_ALERT_TTL_MS:30*1000,TOP_ALERT_BALLISTIC_TTL_MS:60*1000,TOP_ALERT_STRATEGIC_TTL_MS:10*60*1000,
+  DEFAULT_LOCATION:{name:"Київ",lat:50.4501,lng:30.5234},
+  WARNING_GRACE_MS:10*60*1000,DISMISS_TTL_MS:30*60*1000,
+  CHAIN_TRANSITION_MS_PER_KM:500,CHAIN_TRANSITION_MIN_MS:800,CHAIN_TRANSITION_MAX_MS:5000,
+  STRATEGIC_ACTIVITY_TTL_MS:30*60*1000,STRATEGIC_LAYER_MIN_ZOOM:4,MASS_BANNER_TTL_MS:15*60*1000
+};
+const OBSERVATION_TYPES=new Set(["banderol","jet_drone"]);
+const PRIORITY_CHANNELS=new Set(["kyiv_monitor1","ppo_kiev","kiev_tryvoha","ukrainemonitorzagroz","ukraine_ua_24_7"]);
+const PRIORITY_WEIGHT=3.0;
+const RINGS_KEY="kyiv_rings_v41",SETTLEMENTS_VIS_KEY="kyiv_settlements_v41",STRATEGIC_VIS_KEY="kyiv_strategic_v41";
+const INFRA_MODE_KEY="kyiv_infra_mode_v41",POWER_VIS_KEY="kyiv_power_vis_v1";
+const UAV_COLORS=[{id:"white",name:"Білий",hex:"#ffffff"},{id:"orange",name:"Помаранч.",hex:"#fb923c"},{id:"yellow",name:"Жовтий",hex:"#facc15"},{id:"black",name:"Чорний",hex:"#1f2937"}];
+try{const v=localStorage.getItem("kyiv_uav_c_v41");if(v!=null){const i=+v;if(i>=0&&i<4)uavColorIdx=i;}}catch(e){}
+try{const v=localStorage.getItem(RINGS_KEY);if(v==="0")ringsVisible=false;}catch(e){}
+try{const v=localStorage.getItem(SETTLEMENTS_VIS_KEY);if(v==="1")settlementsVisible=true;}catch(e){}
+try{const v=localStorage.getItem(STRATEGIC_VIS_KEY);if(v==="1")strategicVisible=true;}catch(e){}
+try{const v=localStorage.getItem(INFRA_MODE_KEY);if(v!=null){const i=+v;if(i>=0&&i<=4)infraMode=i;}}catch(e){}
+try{const v=localStorage.getItem(POWER_VIS_KEY);if(v==="1")powerVisible=true;}catch(e){}
+function isPriorityChannel(ch){const k=(ch||"").replace(/^@/,"").toLowerCase().trim();if(PRIORITY_CHANNELS.has(k))return true;for(const p of PRIORITY_CHANNELS)if(k.includes(p))return true;return false;}
+function saveUavColor(){try{localStorage.setItem("kyiv_uav_c_v41",String(uavColorIdx));}catch(e){}}
+function currentUavColor(){return UAV_COLORS[uavColorIdx].hex;}
+
+const powerSubstations=[
+  ["ПС 750 кВ «Київська»",50.490836,29.688768,"750","Макарівський р-н","НТСЕУ"],
+  ["ПС 330 кВ «Північна»",50.61313,30.38222,"330","Нові Петрівці","Mapcarta"],
+  ["ПС 330 кВ «Новокиївська»",50.380,30.470,"330","Хотів","Prozorro"],
+  ["ПС 330 кВ «Нивки»",50.476,30.410,"330","Шевченківський","КМДА"],
+  ["ПС 330 кВ «Броварська»",50.538,30.899,"330","Красилівка","Prozorro"],
+  ["ПС 110 кВ «Пріорська»",50.509,30.424,"110","Виноградар","Wikimapia"],
+  ["ПС 110 кВ «Біличі»",50.472,30.330,"110","Біличі","Wikimapia"],
+  ["ПС 110 кВ «Берковецька»",50.495,30.359,"110","Берковець","DTEK"],
+  ["ПС 110 кВ «Московська»",50.430,30.520,"110","Голосіївський","DTEK"],
+  ["ПС 110 кВ «Олімпійська»",50.433,30.520,"110","Печерський","KEBK"],
+  ["ПС 110 кВ «Осокорки»",50.395,30.620,"110","Осокорки","DTEK"],
+  ["ПС 110 кВ «Поливка»",50.400,30.630,"110","Позняки","DTEK"],
+  ["ПС 110 кВ «Соломенська»",50.430,30.480,"110","Солом'янський","DTEK"],
+  ["ПС 110 кВ «Протеїнська»",50.425,30.500,"110","Солом'янський","DTEK"]
+];
+
+const KYIV_OBLAST_SETTLEMENTS=[
+["Прип'ять",51.39474302,30.08446583,"Чорнобильська зона","c"],["Чорнобиль",51.27184786,30.22441931,"Чорнобильська зона","c"],
+["Біла Церква",49.80563193,30.10926837,"Білоцерківський","c"],["Терезине",49.85733315,30.10862037,"Білоцерківський","s"],
+["Володарка",49.52395189,29.91275973,"Білоцерківський","s"],["Гребінки",49.95584068,30.17515067,"Білоцерківський","s"],
+["Дослідницьке",49.92288588,30.14679318,"Білоцерківський","s"],["Рокитне",49.68965541,30.47630798,"Білоцерківський","s"],
+["Сквира",49.73079435,29.66402976,"Білоцерківський","c"],["Ставище",49.39130103,30.1882012,"Білоцерківський","s"],
+["Тараща",49.56066626,30.49540089,"Білоцерківський","c"],["Тетіїв",49.37317715,29.67843897,"Білоцерківський","c"],
+["Узин",49.82016789,30.42185138,"Білоцерківський","c"],["Бориспіль",50.3612042,30.95256256,"Бориспільський","c"],
+["Вороньків",50.21625067,30.90331307,"Бориспільський","v"],["Гора",50.37066577,30.85528315,"Бориспільський","v"],
+["Дівички",50.06469374,31.269951,"Бориспільський","v"],["Гнідин",50.32833684,30.70668059,"Бориспільський","v"],
+["Переяслав",50.07228667,31.45321568,"Бориспільський","c"],["Щасливе",50.37445736,30.78656938,"Бориспільський","v"],
+["Студеники",50.20663801,31.61268373,"Бориспільський","v"],["Ташань",50.04578143,31.84206273,"Бориспільський","v"],
+["Циблі",50.00098357,31.55433719,"Бориспільський","v"],["Яготин",50.24025082,31.79157062,"Бориспільський","c"],
+["Баришівка",50.35755065,31.31698645,"Броварський","s"],["Березань",50.31236212,31.47751805,"Броварський","c"],
+["Бровари",50.50655438,30.80095343,"Броварський","c"],["Княжичі",50.45746644,30.78451038,"Броварський","v"],
+["Сотницьке",50.47801695,30.95607335,"Броварський","v"],["Требухів",50.48370528,30.90574211,"Броварський","v"],
+["Велика Димерка",50.5946841,30.91175229,"Броварський","s"],["Зазим'я",50.56848729,30.6735435,"Броварський","v"],
+["Згурівка",50.49685669,31.78529495,"Броварський","s"],["Калинівка",50.56371446,30.82346993,"Броварський","s"],
+["Калита",50.7529556,31.02528852,"Броварський","s"],["Білогородка",50.38342226,30.25516463,"Бучанський","v"],
+["Бородянка",50.64695206,29.93221968,"Бучанський","s"],["Петропавлівська Борщагівка",50.43191108,30.33371091,"Бучанський","v"],
+["Софіївська Борщагівка",50.41289245,30.36447623,"Бучанський","v"],["Чайки",50.43729993,30.28713401,"Бучанський","v"],
+["Буча",50.55148938,30.21142382,"Бучанський","c"],["Бабинці",50.63841294,30.02560464,"Бучанський","s"],
+["Ворзель",50.54524068,30.14320959,"Бучанський","s"],["Вишневе",50.38625104,30.36581354,"Бучанський","c"],
+["Крюківщина",50.36982722,30.36855771,"Бучанський","v"],["Гостомель",50.57875256,30.26001532,"Бучанський","s"],
+["Ірпінь",50.51146447,30.23870831,"Бучанський","c"],["Коцюбинське",50.48938317,30.33598857,"Бучанський","s"],
+["Макарів",50.45270027,29.80411933,"Бучанський","s"],["Кодра",50.59215781,29.55805109,"Бучанський","s"],
+["Немішаєве",50.56289237,30.09216235,"Бучанський","s"],["Клавдієво-Тарасове",50.58068682,30.0072432,"Бучанський","s"],
+["Пісківка",50.6945919,29.59406433,"Бучанський","s"],["Вишгород",50.58786993,30.5017729,"Вишгородський","c"],
+["Димер",50.78567437,30.30495006,"Вишгородський","s"],["Іванків",50.93968266,29.89113118,"Вишгородський","s"],
+["Красятичі",51.08002951,29.62136874,"Вишгородський","s"],["Славутич",51.52103146,30.75931254,"Вишгородський","c"],
+["Богуслав",49.5464611,30.8713407,"Обухівський","c"],["Васильків",50.18442314,30.31563006,"Обухівський","c"],
+["Кагарлик",49.8642776,30.81538338,"Обухівський","c"],["Козин",50.20818444,30.66328622,"Обухівський","s"],
+["Миронівка",49.66192468,30.98131947,"Обухівський","c"],["Обухів",50.11393672,30.62464616,"Обухівський","c"],
+["Ржищів",49.97019938,31.04991003,"Обухівський","c"],["Українка",50.1387578,30.73689237,"Обухівський","c"],
+["Трипілля",50.11958266,30.77209358,"Обухівський","v"],["Хотів",50.32794438,30.46678319,"Обухівський","v"],
+["Боярка",50.33615993,30.28336111,"Фастівський","c"],["Гатне",50.36108756,30.4140205,"Фастівський","v"],
+["Віта-Поштова",50.31177943,30.37364848,"Фастівський","v"],["Глеваха",50.26833216,30.32663586,"Фастівський","s"],
+["Калинівка",50.22573515,30.23184574,"Фастівський","s"],["Кожанка",49.9681956,29.76302798,"Фастівський","s"],
+["Фастів",50.07670738,29.92340123,"Фастівський","c"],["Борова",50.173,30.104,"Фастівський","v"],
+["Чабани",50.33951508,30.42100442,"Фастівський","s"],["Київ",50.4501,30.5234,"Київ","c"],
+["Наливайківка",50.485,29.719,"Київщина","v"],["Катюжанка",50.806,30.138,"Київщина","v"],
+["Понорниця",51.723,32.846,"Чернігівщина","v"],["Носівка",50.932,31.583,"Чернігівщина","s"],
+["Семенівка",49.595,33.180,"Полтавщина","v"],["Сосниця",51.531,32.500,"Чернігівщина","s"],
+["Кіпті",51.055,31.153,"Чернігівщина","v"],["Новгород-Сіверський",52.006,33.262,"Чернігівщина","c"],
+["Теличка",50.400,30.570,"Київ","district"],["Нижні Сади",50.380,30.550,"Київ","district"],
+["Віта-Литовська",50.300,30.550,"Київ","district"],["Конча-Заспа",50.301,30.577,"Київ","district"],
+["ДВРЗ",50.440,30.650,"Київ","district"],["Березняки",50.430,30.610,"Київ","district"],
+["Південний міст",50.390,30.590,"Київ","district"],["Борщагівка",50.430,30.380,"Київ","district"],
+["Пирогів",50.350,30.550,"Київ","district"],["Лісники",50.300,30.550,"Київ","v"],
+["Нова Забудова",50.400,30.570,"Київ","district"],["Погреби",50.550,30.550,"Київ","district"],
+["Троєщина",50.510,30.600,"Київ","district"],["Бортничі",50.380,30.700,"Київ","district"],
+["Лук'янівка",50.460,30.480,"Київ","district"],["Куренівка",50.490,30.450,"Київ","district"],
+["Виноградар",50.510,30.420,"Київ","district"],["Голосіївський ліс",50.380,30.500,"Київ","district"],
+["Феофанія",50.350,30.480,"Київ","district"],["Мишоловка",50.370,30.520,"Київ","district"],
+["Харківський масив",50.420,30.650,"Київ","district"],["Рембаза",50.420,30.550,"Київ","district"],
+["Дарниця",50.440,30.630,"Київ","district"],["Жуляни",50.402,30.450,"Київ","district"],
+["Видубичі",50.420,30.560,"Київ","district"],["Осокорки",50.400,30.620,"Київ","district"],
+["Позняки",50.410,30.630,"Київ","district"],["Русанівські Сади",50.450,30.600,"Київ","district"],
+["Паньківщина",50.440,30.500,"Київ","district"],["Бусова Гора",50.400,30.550,"Київ","district"],
+["Євбаз",50.450,30.500,"Київ","district"],["Пуща-Водиця",50.540,30.350,"Київ","district"],
+["Лебедівка",50.550,30.500,"Київщина","v"],["ТЕЦ-5",50.393,30.569,"Київ","infra"],
+["ТЕЦ-6",50.530,30.660,"Київ","infra"],
+["Троєщина",50.515,30.601,"Київ","district"],
+["Лісовий масив",50.478,30.631,"Київ","district"],
+["Воскресенка / Рембаза / Промвузол",50.470,30.595,"Київ","district"],
+["Харківський масив",50.403,30.655,"Київ","district"],
+["Дарницька ТЕЦ",50.448,30.643,"Київ","infra"],
+["Парк Кіото",50.465,30.639,"Київ","district"],
+["Озеро Алмазне",50.510,30.645,"Київ","district"],
+["Лісове кладовище",50.499,30.634,"Київ","district"],
+["Залізничне шосе",50.407,30.567,"Київ","district"],
+["Мінський масив",50.519,30.462,"Київ","district"],
+["Оболонь",50.506,30.499,"Київ","district"],
+["Русанівські Сади",50.474,30.578,"Київ","district"],
+["Silver Breeze",50.429,30.595,"Київ","district"],
+["Русанівка",50.439,30.598,"Київ","district"],
+["Лівобережний масив",50.448,30.597,"Київ","district"],
+["Березняки",50.429,30.606,"Київ","district"],
+["Дарницька площа",50.442,30.626,"Київ","district"],
+["Даринок",50.460,30.644,"Київ","district"],
+["Метро Лісова",50.464,30.645,"Київ","district"],
+["Гідропарк",50.444,30.577,"Київ","district"],
+["Відрадний",50.431,30.422,"Київ","district"],
+["Жуляни",50.402,30.450,"Київ","district"],
+["Пирогів",50.350,30.550,"Київ","district"],
+["Видубичі",50.420,30.560,"Київ","district"],
+["Осокорки",50.400,30.620,"Київ","district"],
+["Бусова Гора",50.400,30.550,"Київ","district"],
+["Паньківщина",50.440,30.500,"Київ","district"],
+["Євбаз",50.450,30.500,"Київ","district"],
+["Лук'янівка",50.460,30.480,"Київ","district"],
+["Куренівка",50.490,30.450,"Київ","district"],
+["Пріорка",50.505,30.452,"Київ","district"],
+["Виноградар",50.510,30.420,"Київ","district"],
+["Осокорки",50.400,30.620,"Київ","district"],
+["Бортничі",50.380,30.700,"Київ","district"],
+["Вишневе",50.387,30.358,"Київщина","c"],
+["Мишоловка",50.370,30.520,"Київ","district"],
+["Теличка",50.400,30.570,"Київ","district"],
+["ТЕЦ-5",50.393,30.569,"Київ","infra"],
+["Нижні Сади",50.380,30.550,"Київ","district"],
+["Віта-Литовська",50.300,30.550,"Київ","district"],
+["Конча-Заспа",50.301,30.577,"Київ","district"],
+["Чабани",50.340,30.430,"Київщина","s"],
+["Голосіївський ліс",50.380,30.500,"Київ","district"],
+["Південний міст",50.390,30.590,"Київ","district"],
+["Харківський масив",50.403,30.655,"Київ","district"],
+["Рембаза",50.420,30.550,"Київ","district"],
+["ДВРЗ",50.440,30.650,"Київ","district"],
+["Березняки",50.429,30.606,"Київ","district"],
+["Дарниця",50.440,30.630,"Київ","district"],
+["ТЕЦ-6",50.530,30.660,"Київ","infra"],
+["Чоколівка",50.425,30.447,"Київ","district"],
+["Нивки",50.459,30.406,"Київ","district"],
+["Поділ",50.469,30.517,"Київ","district"],
+["Липки",50.444,30.534,"Київ","district"],
+["Печерськ",50.421,30.549,"Київ","district"],
+["Теремки",50.367,30.454,"Київ","district"],
+["Голосіїв",50.327,30.567,"Київ","district"],
+["Феофанія",50.350,30.480,"Київ","district"],
+["Хотів",50.330,30.472,"Київщина","v"],
+["Боярка",50.319,30.297,"Київщина","c"],
+["Глеваха",50.274,30.327,"Київщина","s"],
+["Калинівка",50.559,30.821,"Київщина","s"],
+["Чайки",50.430,30.300,"Київщина","v"],
+["Білогородка",50.394,30.231,"Київщина","v"],
+["Лебедівка",50.550,30.500,"Київщина","v"],
+["Козелець",50.900,31.117,"Чернігівщина","s"],
+["Ворзель",50.550,30.150,"Київщина","s"],
+["Козин",50.206,30.659,"Київщина","s"],
+["Трипілля",50.118,30.781,"Київщина","v"],
+["Макарів",50.460,29.815,"Київщина","s"],
+["Переяслав",50.065,31.445,"Київщина","c"]
+];
+window.KYIV_OBLAST_SETTLEMENTS=KYIV_OBLAST_SETTLEMENTS;
+
+const kyivBridges=[
+{id:"bridge_001",name:"Автовокзальный путепровод",aliases:["Демеевский путепровод"],type:"overpass",category:"road",district:"Голосеевский",bank:"right",lat:50.421,lng:30.521,radius:250,source:"open_sources"},
+{id:"bridge_002",name:"Арсенальная пешеходная переправа",aliases:["переправа возле Арсенальной"],type:"pedestrian",category:"pedestrian",district:"Печерский",bank:"right",lat:50.444,lng:30.545,radius:180,source:"open_sources"},
+{id:"bridge_003",name:"Байковый железнодорожный мост",aliases:["ж/д мост на Байковой"],type:"railway",category:"rail",district:"Соломенский",bank:"right",lat:50.414,lng:30.513,radius:250,source:"open_sources"},
+{id:"bridge_004",name:"Берестейский путепровод",aliases:["путепровод на Берестейском"],type:"overpass",category:"road",district:"Шевченковский",bank:"right",lat:50.452,lng:30.438,radius:300,source:"open_sources"},
+{id:"bridge_005",name:"Броварской путепровод",aliases:["путепровод на Броварском"],type:"overpass",category:"road",district:"Днепровский",bank:"left",lat:50.464,lng:30.615,radius:300,source:"open_sources"},
+{id:"bridge_006",name:"Венецианский мост",aliases:["мост Гидропарка"],type:"bridge",category:"local",district:"Днепровский",bank:"left",lat:50.445,lng:30.578,radius:180,source:"open_sources"},
+{id:"bridge_007",name:"Венецианская пешеходная переправа",aliases:["пешеходный мост Гидропарка"],type:"pedestrian",category:"pedestrian",district:"Днепровский",bank:"left",lat:50.445,lng:30.579,radius:180,source:"open_sources"},
+{id:"bridge_008",name:"Видубицкий путепровод",aliases:["путепровод Выдубичи"],type:"overpass",category:"road",district:"Печерский",bank:"right",lat:50.405,lng:30.563,radius:300,source:"open_sources"},
+{id:"bridge_009",name:"Гаванский мост",aliases:["Гаванський міст"],type:"bridge",category:"road",district:"Подольский",bank:"right",lat:50.468,lng:30.516,radius:400,source:"open_sources"},
+{id:"bridge_010",name:"Гаванская пешеходная переправа",aliases:["переправа Гавань"],type:"pedestrian",category:"pedestrian",district:"Подольский",bank:"right",lat:50.466,lng:30.515,radius:200,source:"open_sources"},
+{id:"bridge_011",name:"Дарницкий автомобильно-железнодорожный мост",aliases:["Дарницкий мост"],type:"bridge",category:"road_rail",district:"Днепровский",bank:"left",lat:50.421,lng:30.604,radius:500,source:"open_sources"},
+{id:"bridge_012",name:"Дарницкий железнодорожный мост",aliases:["Старый Дарницкий ж/д мост"],type:"railway",category:"rail",district:"Днепровский",bank:"left",lat:50.422,lng:30.607,radius:400,source:"open_sources"},
+{id:"bridge_013",name:"Деснянский мост",aliases:["мост через Десёнку"],type:"bridge",category:"road",district:"Деснянский",bank:"left",lat:50.493,lng:30.558,radius:400,source:"open_sources"},
+{id:"bridge_014",name:"Деснянская пешеходная переправа",aliases:["переправа через Десёнку"],type:"pedestrian",category:"pedestrian",district:"Деснянский",bank:"left",lat:50.493,lng:30.558,radius:200,source:"open_sources"},
+{id:"bridge_015",name:"Дегтярёвский путепровод",aliases:["Дегтярівський шляхопровід"],type:"overpass",category:"road",district:"Шевченковский",bank:"right",lat:50.464,lng:30.454,radius:300,source:"open_sources"},
+{id:"bridge_016",name:"Караваевский путепровод",aliases:["путепровод Караваевы Дачи"],type:"overpass",category:"road",district:"Соломенский",bank:"right",lat:50.437,lng:30.447,radius:300,source:"open_sources"},
+{id:"bridge_017",name:"Киевский железнодорожный мост",aliases:["железнодорожная переправа"],type:"railway",category:"rail",district:"Печерский",bank:"right",lat:50.424,lng:30.555,radius:300,source:"open_sources"},
+{id:"bridge_018",name:"Кудрявский мост",aliases:["Кудрявский пешеходный"],type:"pedestrian",category:"pedestrian",district:"Шевченковский",bank:"right",lat:50.459,lng:30.500,radius:180,source:"open_sources"},
+{id:"bridge_019",name:"Куренёвский железнодорожный мост",aliases:["Куреневский ж/д мост"],type:"railway",category:"rail",district:"Подольский",bank:"right",lat:50.488,lng:30.475,radius:250,source:"open_sources"},
+{id:"bridge_020",name:"Магнитогорский пешеходный мост",aliases:["мост возле Черниговской"],type:"pedestrian",category:"pedestrian",district:"Деснянский",bank:"left",lat:50.459,lng:30.645,radius:200,source:"open_sources"},
+{id:"bridge_021",name:"Мост Метро",aliases:["метромост","Metro Bridge"],type:"metro",category:"metro",district:"Днепровский",bank:"both",lat:50.449,lng:30.573,radius:400,source:"open_sources"},
+{id:"bridge_022",name:"Мост Патона",aliases:["Міст Патона","Paton Bridge"],type:"bridge",category:"road",district:"Печерский",bank:"both",lat:50.421,lng:30.587,radius:450,source:"open_sources"},
+{id:"bridge_023",name:"Мост через Русановский канал",aliases:["Русанівський канал"],type:"bridge",category:"local",district:"Днепровский",bank:"left",lat:50.441,lng:30.603,radius:220,source:"open_sources"},
+{id:"bridge_024",name:"Мост через озеро Радуга",aliases:["Радужный мост"],type:"bridge",category:"local",district:"Днепровский",bank:"left",lat:50.472,lng:30.612,radius:220,source:"open_sources"},
+{id:"bridge_025",name:"Мост через Лыбедь",aliases:["мост Лыбедь"],type:"bridge",category:"local",district:"Голосеевский",bank:"right",lat:50.424,lng:30.515,radius:200,source:"open_sources"},
+{id:"bridge_026",name:"Мост через Виту",aliases:["мост через реку Вита"],type:"bridge",category:"local",district:"Голосеевский",bank:"right",lat:50.350,lng:30.560,radius:250,source:"open_sources"},
+{id:"bridge_027",name:"Оболонский пешеходный мост",aliases:["мост на Оболонский остров"],type:"pedestrian",category:"pedestrian",district:"Оболонский",bank:"right",lat:50.506,lng:30.507,radius:220,source:"open_sources"},
+{id:"bridge_028",name:"Оболонский мост-волна",aliases:["Мост-волна"],type:"pedestrian",category:"pedestrian",district:"Оболонский",bank:"right",lat:50.507,lng:30.508,radius:220,source:"open_sources"},
+{id:"bridge_029",name:"Оболонский локальный мост",aliases:["переправа Оболонь"],type:"pedestrian",category:"pedestrian",district:"Оболонский",bank:"right",lat:50.511,lng:30.497,radius:180,source:"open_sources"},
+{id:"bridge_030",name:"Парковый мост",aliases:["Мост влюблённых"],type:"pedestrian",category:"pedestrian",district:"Печерский",bank:"right",lat:50.445,lng:30.530,radius:180,source:"open_sources"},
+{id:"bridge_031",name:"Пешеходный мост на Труханов остров",aliases:["Труханов мост"],type:"pedestrian",category:"pedestrian",district:"Днепровский",bank:"left",lat:50.456,lng:30.548,radius:250,source:"open_sources"},
+{id:"bridge_032",name:"Пешеходный мост Владимирский спуск",aliases:["мост Кличко","Стеклянный мост"],type:"pedestrian",category:"pedestrian",district:"Шевченковский",bank:"right",lat:50.456,lng:30.525,radius:180,source:"open_sources"},
+{id:"bridge_033",name:"Пешеходный мост Русановка–Березняки",aliases:["Русановская переправа"],type:"pedestrian",category:"pedestrian",district:"Днепровский",bank:"left",lat:50.424,lng:30.598,radius:220,source:"open_sources"},
+{id:"bridge_034",name:"Пешеходный мост Гидропарк",aliases:["Гидропарк пешеходный"],type:"pedestrian",category:"pedestrian",district:"Днепровский",bank:"left",lat:50.448,lng:30.579,radius:180,source:"open_sources"},
+{id:"bridge_035",name:"Пешеходный мост Оболонь",aliases:["Оболонская переправа"],type:"pedestrian",category:"pedestrian",district:"Оболонский",bank:"right",lat:50.510,lng:30.501,radius:180,source:"open_sources"},
+{id:"bridge_036",name:"Подольский мостовой переход",aliases:["Подольско-Воскресенский мост","ПВМП"],type:"bridge",category:"road_metro",district:"Подольский",bank:"both",lat:50.475,lng:30.544,radius:500,source:"open_sources"},
+{id:"bridge_037",name:"Путепровод Караваевы Дачи",aliases:["Караваевский путепровод"],type:"overpass",category:"road",district:"Соломенский",bank:"right",lat:50.437,lng:30.447,radius:300,source:"open_sources"},
+{id:"bridge_038",name:"Путепровод Левобережная",aliases:["путепровод метро Левобережная"],type:"overpass",category:"road",district:"Днепровский",bank:"left",lat:50.451,lng:30.593,radius:250,source:"open_sources"},
+{id:"bridge_039",name:"Путепровод Науки",aliases:["путепровод на проспекте Науки"],type:"overpass",category:"road",district:"Голосеевский",bank:"right",lat:50.394,lng:30.523,radius:300,source:"open_sources"},
+{id:"bridge_040",name:"Путепровод Каденюка",aliases:["путепровод на Каденюка"],type:"overpass",category:"road",district:"Деснянский",bank:"left",lat:50.447,lng:30.639,radius:300,source:"open_sources"},
+{id:"bridge_041",name:"Путепровод Харьковское шоссе",aliases:["Харьковский путепровод"],type:"overpass",category:"road",district:"Дарницкий",bank:"left",lat:50.426,lng:30.652,radius:300,source:"open_sources"},
+{id:"bridge_042",name:"Путепровод Шулявский",aliases:["Шулявский путепровод"],type:"overpass",category:"road",district:"Соломенский",bank:"right",lat:50.453,lng:30.441,radius:350,source:"open_sources"},
+{id:"bridge_043",name:"Путепровод Саперно-Слободская",aliases:["путепровод Саперно-Слободская"],type:"overpass",category:"road",district:"Голосеевский",bank:"right",lat:50.408,lng:30.541,radius:250,source:"open_sources"},
+{id:"bridge_044",name:"Рыбальский железнодорожный мост",aliases:["Петровский ж/д мост"],type:"railway",category:"rail",district:"Подольский",bank:"right",lat:50.480,lng:30.523,radius:400,source:"open_sources"},
+{id:"bridge_045",name:"Русанивский мост",aliases:["Русанівський міст"],type:"bridge",category:"local",district:"Днепровский",bank:"left",lat:50.438,lng:30.606,radius:250,source:"open_sources"},
+{id:"bridge_046",name:"Русанивский метромост",aliases:["метромост через Русановский пролив"],type:"metro",category:"metro",district:"Днепровский",bank:"left",lat:50.446,lng:30.586,radius:300,source:"open_sources"},
+{id:"bridge_047",name:"Русанивская пешеходная переправа",aliases:["пешеходный мост Русановка"],type:"pedestrian",category:"pedestrian",district:"Днепровский",bank:"left",lat:50.439,lng:30.603,radius:180,source:"open_sources"},
+{id:"bridge_048",name:"Северный мост",aliases:["Московский мост","Північний міст"],type:"bridge",category:"road",district:"Оболонский",bank:"both",lat:50.493,lng:30.527,radius:500,source:"open_sources"},
+{id:"bridge_049",name:"Северный железнодорожный мост",aliases:["ж/д переправа север"],type:"railway",category:"rail",district:"Оболонский",bank:"both",lat:50.495,lng:30.520,radius:350,source:"open_sources"},
+{id:"bridge_050",name:"Старозабарский железнодорожный мост",aliases:["Старозабарский мост"],type:"railway",category:"rail",district:"Подольский",bank:"right",lat:50.500,lng:30.490,radius:250,source:"open_sources"},
+{id:"bridge_051",name:"Соломенский железнодорожный мост",aliases:["ж/д мост Соломенка"],type:"railway",category:"rail",district:"Соломенский",bank:"right",lat:50.430,lng:30.455,radius:250,source:"open_sources"},
+{id:"bridge_052",name:"Трухановский пешеходный мост",aliases:["Труханов мост"],type:"pedestrian",category:"pedestrian",district:"Днепровский",bank:"left",lat:50.456,lng:30.548,radius:250,source:"open_sources"},
+{id:"bridge_053",name:"Троещинский путепровод",aliases:["путепровод Троещина"],type:"overpass",category:"road",district:"Деснянский",bank:"left",lat:50.512,lng:30.620,radius:300,source:"open_sources"},
+{id:"bridge_054",name:"Южный мост",aliases:["Південний міст"],type:"bridge",category:"road_metro",district:"Дарницкий",bank:"both",lat:50.396,lng:30.582,radius:500,source:"open_sources"},
+{id:"bridge_055",name:"Путепровод Академика Палладина",aliases:["путепровод Паладина"],type:"overpass",category:"road",district:"Святошинский",bank:"right",lat:50.463,lng:30.355,radius:300,source:"open_sources"},
+{id:"bridge_056",name:"Путепровод Победы",aliases:["путепровод Берестейский"],type:"overpass",category:"road",district:"Святошинский",bank:"right",lat:50.456,lng:30.390,radius:300,source:"open_sources"},
+{id:"bridge_057",name:"Путепровод Гната Юры",aliases:["путепровод Борщаговка"],type:"overpass",category:"road",district:"Святошинский",bank:"right",lat:50.423,lng:30.399,radius:300,source:"open_sources"},
+{id:"bridge_058",name:"Путепровод Леся Курбаса",aliases:["путепровод Курбаса"],type:"overpass",category:"road",district:"Святошинский",bank:"right",lat:50.431,lng:30.394,radius:280,source:"open_sources"},
+{id:"bridge_059",name:"Путепровод Борщаговский",aliases:["Борщаговский путепровод"],type:"overpass",category:"road",district:"Святошинский",bank:"right",lat:50.414,lng:30.399,radius:300,source:"open_sources"},
+{id:"bridge_060",name:"Путепровод Отрадный",aliases:["Отрадненский путепровод"],type:"overpass",category:"road",district:"Соломенский",bank:"right",lat:50.445,lng:30.423,radius:300,source:"open_sources"},
+{id:"bridge_061",name:"Путепровод Индустриальный",aliases:["Индустриальный путепровод"],type:"overpass",category:"road",district:"Соломенский",bank:"right",lat:50.442,lng:30.458,radius:300,source:"open_sources"},
+{id:"bridge_062",name:"Путепровод Выборгский",aliases:["Выборгский путепровод"],type:"overpass",category:"road",district:"Шевченковский",bank:"right",lat:50.465,lng:30.444,radius:280,source:"open_sources"},
+{id:"bridge_063",name:"Путепровод Довженко",aliases:["путепровод на Довженко"],type:"overpass",category:"road",district:"Шевченковский",bank:"right",lat:50.459,lng:30.455,radius:280,source:"open_sources"},
+{id:"bridge_064",name:"Путепровод Нивки",aliases:["Нивский путепровод"],type:"overpass",category:"road",district:"Шевченковский",bank:"right",lat:50.459,lng:30.414,radius:280,source:"open_sources"},
+{id:"bridge_065",name:"Путепровод Святошино",aliases:["Святошинский путепровод"],type:"overpass",category:"road",district:"Святошинский",bank:"right",lat:50.457,lng:30.390,radius:280,source:"open_sources"},
+{id:"bridge_066",name:"Путепровод Вокзальный",aliases:["путепровод возле вокзала"],type:"overpass",category:"road",district:"Соломенский",bank:"right",lat:50.441,lng:30.489,radius:280,source:"open_sources"},
+{id:"bridge_067",name:"Путепровод Протасов Яр",aliases:["Протасовский путепровод"],type:"overpass",category:"road",district:"Соломенский",bank:"right",lat:50.423,lng:30.500,radius:280,source:"open_sources"},
+{id:"bridge_068",name:"Путепровод Лыбедская",aliases:["Лыбедский путепровод"],type:"overpass",category:"road",district:"Голосеевский",bank:"right",lat:50.412,lng:30.522,radius:280,source:"open_sources"},
+{id:"bridge_069",name:"Путепровод Демиевка",aliases:["Демеевский путепровод"],type:"overpass",category:"road",district:"Голосеевский",bank:"right",lat:50.410,lng:30.515,radius:280,source:"open_sources"},
+{id:"bridge_070",name:"Путепровод Голосеево",aliases:["Голосеевский путепровод"],type:"overpass",category:"road",district:"Голосеевский",bank:"right",lat:50.397,lng:30.510,radius:280,source:"open_sources"},
+{id:"bridge_071",name:"Железнодорожный мост Байковая",aliases:["Байковский ж/д мост"],type:"railway",category:"rail",district:"Соломенский",bank:"right",lat:50.414,lng:30.513,radius:220,source:"open_sources"},
+{id:"bridge_072",name:"Железнодорожный мост Сикорского",aliases:["ж/д мост Сикорского"],type:"railway",category:"rail",district:"Шевченковский",bank:"right",lat:50.474,lng:30.445,radius:220,source:"open_sources"},
+{id:"bridge_073",name:"Железнодорожный мост Жабаева",aliases:["ж/д мост Жабаева"],type:"railway",category:"rail",district:"Подольский",bank:"right",lat:50.492,lng:30.477,radius:220,source:"open_sources"},
+{id:"bridge_074",name:"Железнодорожный мост Куренёвка",aliases:["Куренёвский ж/д мост"],type:"railway",category:"rail",district:"Подольский",bank:"right",lat:50.489,lng:30.475,radius:220,source:"open_sources"},
+{id:"bridge_075",name:"Железнодорожный мост Вита",aliases:["ж/д мост через Виту"],type:"railway",category:"rail",district:"Голосеевский",bank:"right",lat:50.350,lng:30.560,radius:250,source:"open_sources"},
+{id:"bridge_076",name:"Пешеходный мост Отрадный",aliases:["мост в парке Отрадный"],type:"pedestrian",category:"pedestrian",district:"Соломенский",bank:"right",lat:50.442,lng:30.420,radius:180,source:"open_sources"},
+{id:"bridge_077",name:"Пешеходный мост Черниговская",aliases:["мост возле Черниговской"],type:"pedestrian",category:"pedestrian",district:"Деснянский",bank:"left",lat:50.459,lng:30.645,radius:180,source:"open_sources"},
+{id:"bridge_078",name:"Пешеходный мост Саперно-Слободская",aliases:["переправа Саперно-Слободская"],type:"pedestrian",category:"pedestrian",district:"Голосеевский",bank:"right",lat:50.408,lng:30.541,radius:180,source:"open_sources"},
+{id:"bridge_079",name:"Пешеходный мост Площадь Славы",aliases:["переправа пл. Славы"],type:"pedestrian",category:"pedestrian",district:"Печерский",bank:"right",lat:50.438,lng:30.544,radius:180,source:"open_sources"},
+{id:"bridge_080",name:"Пешеходный мост Парк Дружбы народов",aliases:["переправа парк"],type:"pedestrian",category:"pedestrian",district:"Деснянский",bank:"left",lat:50.488,lng:30.560,radius:180,source:"open_sources"},
+{id:"bridge_081",name:"Мост Берковец",aliases:["переправа Берковец"],type:"local",category:"local",district:"Святошинский",bank:"right",lat:50.475,lng:30.365,radius:200,source:"open_sources"},
+{id:"bridge_082",name:"Мост Беличи",aliases:["переправа Беличи"],type:"local",category:"local",district:"Святошинский",bank:"right",lat:50.478,lng:30.365,radius:200,source:"open_sources"},
+{id:"bridge_083",name:"Мост Новобеличи",aliases:["переправа Новобеличи"],type:"local",category:"local",district:"Святошинский",bank:"right",lat:50.474,lng:30.355,radius:200,source:"open_sources"},
+{id:"bridge_084",name:"Мост Виноградарь",aliases:["переправа Виноградарь"],type:"local",category:"local",district:"Подольский",bank:"right",lat:50.510,lng:30.425,radius:200,source:"open_sources"},
+{id:"bridge_085",name:"Мост Куренёвка",aliases:["переправа Куренёвка"],type:"local",category:"local",district:"Подольский",bank:"right",lat:50.490,lng:30.470,radius:200,source:"open_sources"},
+{id:"bridge_086",name:"Мост Оболонь",aliases:["локальная переправа Оболонь"],type:"local",category:"local",district:"Оболонский",bank:"right",lat:50.515,lng:30.505,radius:200,source:"open_sources"},
+{id:"bridge_087",name:"Мост Минский массив",aliases:["переправа Минский массив"],type:"local",category:"local",district:"Оболонский",bank:"right",lat:50.515,lng:30.465,radius:200,source:"open_sources"},
+{id:"bridge_088",name:"Мост Воскресенка",aliases:["переправа Воскресенка"],type:"local",category:"local",district:"Днепровский",bank:"left",lat:50.480,lng:30.610,radius:200,source:"open_sources"},
+{id:"bridge_089",name:"Мост Троещина",aliases:["переправа Троещина"],type:"local",category:"local",district:"Деснянский",bank:"left",lat:50.510,lng:30.620,radius:200,source:"open_sources"},
+{id:"bridge_090",name:"Мост Лесной массив",aliases:["переправа Лесной"],type:"local",category:"local",district:"Деснянский",bank:"left",lat:50.475,lng:30.640,radius:200,source:"open_sources"},
+{id:"bridge_091",name:"Эстакада Новоконстантиновская",aliases:["эстакада Новоконстантиновская"],type:"viaduct",category:"road",district:"Подольский",bank:"right",lat:50.486,lng:30.480,radius:300,source:"open_sources"},
+{id:"bridge_092",name:"Эстакада проспект Науки",aliases:["эстакада Науки"],type:"viaduct",category:"road",district:"Голосеевский",bank:"right",lat:50.394,lng:30.523,radius:300,source:"open_sources"},
+{id:"bridge_093",name:"Эстакада Выдубичи",aliases:["эстакада Выдубичи"],type:"viaduct",category:"road",district:"Печерский",bank:"right",lat:50.404,lng:30.562,radius:300,source:"open_sources"},
+{id:"bridge_094",name:"Эстакада Набережное шоссе",aliases:["эстакада Набережного шоссе"],type:"viaduct",category:"road",district:"Печерский",bank:"right",lat:50.438,lng:30.546,radius:300,source:"open_sources"},
+{id:"bridge_095",name:"Эстакада Подольская",aliases:["Подольская эстакада"],type:"viaduct",category:"road",district:"Подольский",bank:"right",lat:50.480,lng:30.505,radius:300,source:"open_sources"},
+{id:"bridge_096",name:"Эстакада Рыбальский остров",aliases:["эстакада Рыбальский"],type:"viaduct",category:"road",district:"Подольский",bank:"right",lat:50.476,lng:30.510,radius:300,source:"open_sources"},
+{id:"bridge_097",name:"Эстакада Оболонская набережная",aliases:["эстакада Оболонь"],type:"viaduct",category:"road",district:"Оболонский",bank:"right",lat:50.505,lng:30.505,radius:250,source:"open_sources"},
+{id:"bridge_098",name:"Эстакада Русановка",aliases:["Русановская эстакада"],type:"viaduct",category:"road",district:"Днепровский",bank:"left",lat:50.439,lng:30.603,radius:250,source:"open_sources"},
+{id:"bridge_099",name:"Эстакада Березняки",aliases:["Березняковская эстакада"],type:"viaduct",category:"road",district:"Днепровский",bank:"left",lat:50.414,lng:30.595,radius:250,source:"open_sources"},
+{id:"bridge_100",name:"Эстакада Позняки",aliases:["Позняковская эстакада"],type:"viaduct",category:"road",district:"Дарницкий",bank:"left",lat:50.410,lng:30.633,radius:250,source:"open_sources"},
+{id:"bridge_101",name:"Путепровод Позняки",aliases:["Позняковский путепровод"],type:"overpass",category:"road",district:"Дарницкий",bank:"left",lat:50.414,lng:30.638,radius:300,source:"open_sources"},
+{id:"bridge_102",name:"Путепровод Осокорки",aliases:["Осокорковский путепровод"],type:"overpass",category:"road",district:"Дарницкий",bank:"left",lat:50.395,lng:30.620,radius:300,source:"open_sources"},
+{id:"bridge_103",name:"Путепровод Харьковский",aliases:["Харьковский путепровод Дарницкий"],type:"overpass",category:"road",district:"Дарницкий",bank:"left",lat:50.421,lng:30.650,radius:300,source:"open_sources"},
+{id:"bridge_104",name:"Путепровод Бортничи",aliases:["Бортнический путепровод"],type:"overpass",category:"road",district:"Дарницкий",bank:"left",lat:50.366,lng:30.665,radius:300,source:"open_sources"},
+{id:"bridge_105",name:"Путепровод Осокорки–Позняки",aliases:["путепровод Осокорки Позняки"],type:"overpass",category:"road",district:"Дарницкий",bank:"left",lat:50.405,lng:30.630,radius:300,source:"open_sources"}
+];
+
+const energyDatabase=[
+{id:"energy_001",name:"Київська ТЕЦ-5",type:"power_plant",category:"CHP",location:"Київ, Голосіївський район",lat:50.393,lng:30.569,status:"active"},
+{id:"energy_002",name:"Київська ТЕЦ-6",type:"power_plant",category:"CHP",location:"Київ, Деснянський район",lat:50.532,lng:30.662,status:"active"},
+{id:"energy_003",name:"Дарницька ТЕЦ",type:"power_plant",category:"CHP",location:"Київ, Дарницький район",lat:50.447,lng:30.640,status:"active"},
+{id:"energy_006",name:"Трипільська ТЕС",type:"power_plant",category:"thermal",location:"Українка, Обухівський район",lat:50.163,lng:30.746,status:"active"},
+{id:"energy_007",name:"Білоцерківська ТЕЦ",type:"power_plant",category:"CHP",location:"Біла Церква",lat:49.796,lng:30.117,status:"active"},
+{id:"energy_011",name:"Київська ГЕС",type:"hydro",category:"HPP",location:"Вишгород",lat:50.584,lng:30.488,status:"active"},
+{id:"energy_012",name:"Київська ГАЕС",type:"hydro",category:"PSP",location:"Вишгород",lat:50.585,lng:30.490,status:"active"}
+];
+
+const infrastructureObjects=[
+{id:"tec_6",name:"Київська ТЕЦ-6",aliases:["ТЕЦ-6","Киевская ТЭЦ-6","CHP-6"],type:"power_plant",category:"CHP",district:"Деснянський",lat:50.531699,lng:30.662307,radius:1000,source:"Global Energy Monitor",status:"active"},
+{id:"tec_5",name:"Київська ТЕЦ-5",aliases:["ТЕЦ-5","Киевская ТЭЦ-5","CHP-5"],type:"power_plant",category:"CHP",district:"Голосіївський",lat:50.393170,lng:30.569477,radius:1000,source:"Global Energy Monitor",status:"active"},
+{id:"tec_4",name:"Дарницька ТЕЦ-4",aliases:["ТЕЦ-4","Дарницька ТЕЦ","Дарницкая ТЭЦ"],type:"power_plant",category:"CHP",district:"Дніпровський",lat:50.446638,lng:30.639666,radius:1000,source:"Locator / офіційна адреса",status:"active"},
+{id:"ps_kyivska_750",name:"ПС 750 кВ «Київська»",aliases:["Киевская 750","ПС Київська","Kyivska 750"],type:"power_substation",category:"transmission",district:"Бучанський район",lat:50.490836,lng:29.688768,radius:500,source:"НТСЕУ",status:"active"}
+];
+
+const incidentObjects=[];
+
+window.KYIV_INFRA={bridges:kyivBridges,energy:energyDatabase,infrastructure:infrastructureObjects,incidents:incidentObjects,power:powerSubstations};
+function findNearestInfra(lat,lng,maxKm){if(lat==null||lng==null)return null;const km=Number.isFinite(maxKm)?maxKm:Infinity;let best=null,bestD=Infinity,kind=null;for(const b of kyivBridges){const d=haversineKm(lat,lng,b.lat,b.lng);if(d<bestD&&d<=km){bestD=d;best=b;kind="bridge";}}for(const e of energyDatabase){const d=haversineKm(lat,lng,e.lat,e.lng);if(d<bestD&&d<=km){bestD=d;best=e;kind="energy";}}for(const i of infrastructureObjects){const d=haversineKm(lat,lng,i.lat,i.lng);if(d<bestD&&d<=km){bestD=d;best=i;kind="infrastructure";}}return best?{object:best,kind,distanceKm:bestD}:null;}
+
+/* ============================================================
+   УТИЛИТЫ
+============================================================ */
+const SETTLEMENT_INDEX=(()=>{const norm=s=>s.toLowerCase().replace(/[’`´']/g,"'").replace(/[^\p{L}\p{N}\s'-]/gu," ").replace(/\s+/g," ").trim();const cities=[];for(const s of KYIV_OBLAST_SETTLEMENTS){const rec={name:s[0],lat:s[1],lon:s[2],raion:s[3],type:s[4],norm:norm(s[0]),_chornobyl:/Чорнобиль/i.test(s[3])};if(rec.type==="c"||rec.type==="s"||rec.type==="town"||rec.type==="district"||rec.type==="v"||rec.type==="infra")cities.push(rec);}cities.sort((a,b)=>b.norm.length-a.norm.length);return{cities,norm};})();
+function findSettlementInText(text){if(!text)return null;const low=SETTLEMENT_INDEX.norm(text);if(!low)return null;let best=null;for(const s of KYIV_OBLAST_SETTLEMENTS){const n=SETTLEMENT_INDEX.norm(s[0]);if(n.length<3)continue;const idx=low.indexOf(n);if(idx<0)continue;const before=idx>0?low[idx-1]:" ";const after=idx+n.length<low.length?low[idx+n.length]:" ";if(!(/[^а-яіїєґa-z0-9]/i.test(before)||before===" "))continue;if(!(/[^а-яіїєґa-z0-9]/i.test(after)||after===" "))continue;const typeScore=s[4]==="c"?2:(s[4]==="s"||s[4]==="town"||s[4]==="district")?1:0;const score=n.length*10+typeScore;if(!best||score>best.score||(score===best.score&&idx<best.index)){best={key:"settlement:"+n,name:s[0],lat:s[1],lon:s[2],raion:s[3],type:s[4],index:idx,length:n.length,_chornobyl:/Чорнобиль/i.test(s[3]),score};}}return best;}
+const kyivAreas=[{id:"staryi_kyiv",name:"Старий Київ",lat:50.4583,lng:30.5161},{id:"podil",name:"Поділ",lat:50.4650,lng:30.5170},{id:"pechersk",name:"Печерськ",lat:50.4330,lng:30.5450},{id:"obolon",name:"Оболонь",lat:50.5080,lng:30.4980},{id:"vynohradar",name:"Виноградар",lat:50.5100,lng:30.4200},{id:"troieshchyna",name:"Троєщина",lat:50.5100,lng:30.6000},{id:"pozniaky",name:"Позняки",lat:50.4100,lng:30.6300},{id:"osokorky",name:"Осокорки",lat:50.3900,lng:30.6200},{id:"holosiiv",name:"Голосіїв",lat:50.3900,lng:30.5000},{id:"teremky",name:"Теремки",lat:50.3700,lng:30.4500},{id:"sviatoshyn",name:"Святошин",lat:50.4550,lng:30.3650},{id:"nyvky",name:"Нивки",lat:50.4600,lng:30.4000},{id:"shuliavka",name:"Шулявка",lat:50.4500,lng:30.4500},{id:"zhuliany",name:"Жуляни",lat:50.4100,lng:30.4500}];
+window.kyivAreas=kyivAreas;
+const CHANNEL_WEIGHTS={"deraketaua":2.0,"war_raketaua":1.8,"monitorwarr":1.8,"ukrainar":1.8,"ua_rockets":1.5,"vibuxaviasia":1.5,"monitor_ukr":1.5,"radar_raketaa":1.3,"kpszsu":1.5,"povitryana_rozvidka":1.3,"ukrainesradar":1.3,"kiev_nebo":1.2,"kyiv_golovne":1.2,"kiev_tryvoha":1.2,"vybuhy_bavovna":1.3,"monitoringwarua":1.3,"chyste_nebo":1.4,"eradarrua":1.3,"повітряні сили зсу":1.5};
+function channelWeight(name){if(isPriorityChannel(name))return PRIORITY_WEIGHT;const k=(name||"").replace(/^@/,"").toLowerCase().trim();if(CHANNEL_WEIGHTS[k]!=null)return CHANNEL_WEIGHTS[k];for(const[key,w]of Object.entries(CHANNEL_WEIGHTS))if(k.includes(key))return w;return 1.0;}
+function channelClass(name){if(isPriorityChannel(name))return "prio";const w=channelWeight(name);if(w>=1.5)return"trusted";if(w>=1.0)return"";return"suspicious";}
+function isAltitudeChannel(c){const k=(c||"").replace(/^@/,"").toLowerCase().trim();for(const x of CONFIG.ALTITUDE_CHANNELS)if(k.includes(x))return true;return false;}
+function inZone(lat,lon){if(lat==null||lon==null)return false;return haversineKm(CONFIG.KYIV[0],CONFIG.KYIV[1],lat,lon)<=CONFIG.ZONE_RADIUS_KM;}
+function inKyivOblast(lat,lon){if(lat==null||lon==null)return false;return haversineKm(CONFIG.KYIV_OBLAST_CENTER[0],CONFIG.KYIV_OBLAST_CENTER[1],lat,lon)<=CONFIG.KYIV_OBLAST_RADIUS_KM;}
+function isKyivOrOblast(name){if(!name)return false;const s=String(name).toLowerCase();if(/київ(?!ськ)/.test(s)||/киев(?!ск)/.test(s))return true;if(/київськ|киевск/.test(s))return true;return false;}
+function resolveSpeedKmh(type,txt){if(txt){const l=txt.toLowerCase();const hints=["герань-2","герань 2","geran-2","герань-3","geran-3","герань-4","geran-4","герань-5","geran-5","реактивн","циркон","кинжал","искандер","калибр","х-101","х-555","с-300","с-400","кн-23","оникс","s-8000","бандероль","умпб","fpv","шахед","герань"];for(const h of hints){if(l.includes(h)){if(h==="шахед"||h==="герань"){if(/герань\s*-?\s*5/.test(l))return 220;if(/герань\s*-?\s*4/.test(l))return 200;if(/герань\s*-?\s*3/.test(l))return 190;if(/герань\s*-?\s*2/.test(l))return 180;}return CONFIG.SPEED_BY_HINT[h];}}}return CONFIG.FALLBACK_SPEED[type]||150;}
+function etaToKyivMin(lat,lon,type,spd){if(lat==null||lon==null)return null;const s=spd||resolveSpeedKmh(type,"");if(!s)return null;return haversineKm(lat,lon,CONFIG.KYIV[0],CONFIG.KYIV[1])/s*60;}
+function formatEta(m){if(m==null)return"—";if(m<0.5)return"<1 хв";if(m<60)return`~${Math.round(m)} хв`;return`~${Math.floor(m/60)} год ${Math.round(m%60)} хв`;}
+function haversineKm(a,b,c,d){const R=6371,toR=x=>x*Math.PI/180;const dLat=toR(c-a),dLon=toR(d-b);const x=Math.sin(dLat/2)**2+Math.cos(toR(a))*Math.cos(toR(c))*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+function bearingBetween(lat1,lon1,lat2,lon2){const φ1=lat1*Math.PI/180,φ2=lat2*Math.PI/180,Δλ=(lon2-lon1)*Math.PI/180;const y=Math.sin(Δλ)*Math.cos(φ2);const x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);return(Math.atan2(y,x)*180/Math.PI+360)%360;}
+function destPoint(lat,lon,brg,distKm){const R=6371,br=brg*Math.PI/180,lat1=lat*Math.PI/180,lon1=lon*Math.PI/180;const lat2=Math.asin(Math.sin(lat1)*Math.cos(distKm/R)+Math.cos(lat1)*Math.sin(distKm/R)*Math.cos(br));const lon2=lon1+Math.atan2(Math.sin(br)*Math.sin(distKm/R)*Math.cos(lat1),Math.cos(distKm/R)-Math.sin(lat1)*Math.sin(lat2));return[lat2*180/Math.PI,lon2*180/Math.PI];}
+function normalize(s){return(s||"").toLowerCase().replace(/[’`´']/g,"'").replace(/[^\p{L}\p{N}\s'-]/gu," ").replace(/\s+/g," ").trim();}
+function showToast(msg,ms=1800){const t=$("toast");if(!t)return;t.textContent=msg;t.classList.add("show");clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove("show"),ms);}
+function levenshtein(a,b){a=(a||"").toLowerCase();b=(b||"").toLowerCase();const m=a.length,n=b.length;if(!m)return n;if(!n)return m;const dp=Array.from({length:m+1},()=>new Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c);}return dp[m][n];}
+const DEBRIS_RE=/(?:уламк|обломк|фрагмент[иы]|осколк)/i;
+const NON_AIR_CONTEXT_RE=new RegExp(["диверс","партизан","АТЕШ","атеш","саботаж","підпал","поджог","підрив","немає\\s+ніяких","реакцій\\s+на","авіація\\s+НАТО","над\\s+Литвою","над\\s+Литвой","боєць","боец\\b","батальйон","батальон","бригад","пішов\\s+на\\s+війну","розібрал","разобрал","на\\s+частини","дослідил","исследовал","вивчил","изучил","запчастин","комплектующ","імпортн","импортн","деталей","детали"].join("|"),"i");
+const NO_LAUNCH_RE=/без\s+пуск|без\s+запуск|не\s+було\s+пуск|поки\s+що\s+без|поки\s+без|не\s+спостеріга|не\s+наблюда|без\s+бойових\s+ознак|без\s+боевых\s+признак|очікуємо\s+відбій|очікуємо\s+отбой|не\s+підтверджен|не\s+подтвержден|скасован|отменен|відмінено/i;
+const CLEAR_RE=/відбій|отбой|чисто|без\s+загроз|наразі\s+чисто|наразі\s+без\s+загроз|все\s+чисто|небезпека\s+минула/i;
+const LAUNCH_RE=/пуск|пуски|запуск|запуски|старт|стартував|уже\s+в\s+повітр|уже\s+в\s+воздух|в\s+повітрі|в\s+воздухе|відмічено|отмечен|зліт|злет|взлет|взліт|курсує|прямує|летить|рухається|виліт|вилетів/i;
+const ACTION_RE=/курс|курсом|летит|летять|руха|рухається|напрям|в\s+напрямк|у\s+бік|у\s+напрямку|збит|сбит|пада|падінн|підліта|подлета|наближ|атак|удар|пуск|загроз|угроз|висот|вилетів|прямує/i;
+const THREAT_RE=/загроза|угроза|можлив|возможн|готов|напоготові|готують|готується|підготовк|подготовк/i;
+const READY_RE=/бойов[аоі]й?\s+готовност|боев[оа]й?\s+готовност|готов[іи]\s+до\s+застосування|готовы\s+к\s+применению/i;
+const TOO_GENERIC_PLACES=new Set(["київ","киев","kyiv","київська","киевская","київської","киевской","україна","украина"]);
+const OBSERVED_RE=/(?:повз|через|мимо|біля|возле|рядом\s+с|около|проходить\s+повз|пройшов\s+повз|над)\s+([А-ЯІЇЄҐа-яіїєґ'’\-]{3,30})/i;
+const TARGET_RE=/(?:курс(?:ом)?\s+на\s*\/?\s*повз|курс(?:ом)?\s+на|в\s+напрямку|на\s+напрямок|у\s+напрямк|в\s+направлен|на\s+напрямк|у\s+бік|в\s+сторон|у\s+сторон|летить\s+на|рухається\s+на|прямує\s+на|🅿️?\s*\d+\s*х\s*)\s*([А-ЯІЇЄҐа-яіїєґ'’\-]+(?:\s+[А-ЯІЇЄҐа-яіїєґ][а-яіїєґ'’\-]+){0,3})/i;
+
+const PLACES={"чернігів":[51.500,31.290,"Чернігів"],"ніжин":[51.050,31.880,"Ніжин"],"прилуки":[50.590,32.380,"Прилуки"],"суми":[50.910,34.800,"Суми"],"шустка":[51.870,33.470,"Шостка"],"конотоп":[51.240,33.200,"Конотоп"],"харків":[49.990,36.230,"Харків"],"дніпро":[48.460,35.040,"Дніпро"],"запоріжжя":[47.840,35.140,"Запоріжжя"],"одеса":[46.480,30.730,"Одеса"],"миколаїв":[46.970,32.000,"Миколаїв"],"херсон":[46.640,32.620,"Херсон"],"львів":[49.840,24.030,"Львів"],"вінниця":[49.230,28.470,"Вінниця"],"полтава":[49.590,34.550,"Полтава"],"черкаси":[49.440,32.060,"Черкаси"],"житомир":[50.250,28.660,"Житомир"],"рівне":[50.620,26.250,"Рівне"],"луцьк":[50.750,25.340,"Луцьк"],"ужгород":[48.620,22.290,"Ужгород"],"воронеж":[51.670,39.180,"Воронеж"],"ростов-на-дону":[47.240,39.700,"Ростов-на-Дону"],"курск":[51.730,36.190,"Курск"],"белгород":[50.600,36.590,"Белгород"],"брянск":[53.250,34.370,"Брянск"],"орёл":[52.970,36.060,"Орёл"],"энгельс":[51.480,46.210,"Энгельс"],"гомель":[52.440,30.990,"Гомель"],"припять":[51.400,30.050,"Припять"],"славутич":[51.520,30.750,"Славутич"],"любеч":[51.420,30.720,"Любеч"],"хойники":[51.900,29.970,"Хойники"]};
+const PLACE_KEYS_BY_LEN=Object.keys(PLACES).sort((a,b)=>b.length-a.length);
+const REGIONS=[{key:"курськ",re:/курськ|курск/i,name:"Курська обл.",lat:51.73,lon:36.19},{key:"брянськ",re:/брянськ|брянск/i,name:"Брянська обл.",lat:53.25,lon:34.37},{key:"белгород",re:/белгород|бєлгород/i,name:"Бєлгородська обл.",lat:50.60,lon:36.59},{key:"ростов",re:/ростов/i,name:"Ростовська обл.",lat:47.24,lon:39.70},{key:"воронеж",re:/воронеж/i,name:"Воронезька обл.",lat:51.67,lon:39.18},{key:"крым",re:/крим|крым|севастопол|чорне\s+море|черное\s+море/i,name:"Крим / Чорне море",lat:45.00,lon:34.00},{key:"чернігівська",re:/чернігівськ|черниговск/i,name:"Чернігівська обл.",lat:51.50,lon:31.29},{key:"сумська",re:/сумськ|сумск/i,name:"Сумська обл.",lat:50.91,lon:34.80},{key:"київська",re:/київськ|киевск/i,name:"Київська обл.",lat:50.45,lon:30.52}];
+function findRegionInText(t){for(const r of REGIONS)if(r.re.test(t||""))return r;return null;}
+function findPlaceInOldDict(text){const low=(text||"").toLowerCase().replace(/[’`´]/g,"'");let best=null;for(const key of PLACE_KEYS_BY_LEN){const idx=low.indexOf(key);if(idx<0)continue;const before=idx>0?low[idx-1]:" ";const after=idx+key.length<low.length?low[idx+key.length]:" ";if(!(/[^а-яіїєґa-z]/i.test(before)||before===" "))continue;if(!(/[^а-яіїєґa-z]/i.test(after)||after===" "))continue;if(!best||idx<best.index)best={key,name:PLACES[key][2],lat:PLACES[key][0],lon:PLACES[key][1],index:idx,length:key.length};}return best;}
+function findPlaceInText(text){const s=findSettlementInText(text);if(s)return s;return findPlaceInOldDict(text);}
+function findPlaceFuzzy(text,th=0.7){if(!text)return null;const exact=findPlaceInText(text);if(exact)return exact;const low=normalize(text);let best=null,bestS=0;const cands=[];for(const s of KYIV_OBLAST_SETTLEMENTS)cands.push({key:"s:"+s[0],name:s[0],lat:s[1],lon:s[2],norm:SETTLEMENT_INDEX.norm(s[0])});for(const a of kyivAreas)cands.push({key:"area:"+a.id,name:a.name,lat:a.lat,lon:a.lng,norm:normalize(a.name)});for(const c of cands){if(c.norm.length<3)continue;if(low.includes(c.norm)){if(.95>bestS){bestS=.95;best=c;}continue;}const d=levenshtein(low.slice(0,c.norm.length+3),c.norm);const sc=1-d/Math.max(low.length,c.norm.length);if(sc>=th&&sc>bestS){bestS=sc;best=c;}}if(!best)return null;return{key:best.key,name:best.name,lat:best.lat,lon:best.lon,fuzzyScore:Math.round(bestS*100)/100,_fuzzy:true};}
+
+/* ============================================================
+   КАРТА
+============================================================ */
+try{map=L.map("map",{center:CONFIG.KYIV,zoom:9,zoomControl:false,attributionControl:true});}catch(e){showErr("Leaflet: "+e.message);}
+L.control.zoom({position:"topright"}).addTo(map);
+if(map){osmLayer=L.tileLayer(CONFIG.TILE_URL,{maxZoom:19,attribution:CONFIG.TILE_ATTR,subdomains:"abcd"});osmLayer.addTo(map);}
+const threatLayer=map?L.layerGroup().addTo(map):null;
+const msgThreatLayer=map?L.layerGroup().addTo(map):null;
+const impactLayer=map?L.layerGroup().addTo(map):null;
+const alertLayer=map?L.layerGroup().addTo(map):null;
+const settlementsLayer=map?L.layerGroup():null;
+const strategicLayer=map?L.layerGroup():null;
+const infraLayer=map?L.layerGroup():null;
+const baseSat=map?L.layerGroup():null;
+if(map){L.tileLayer(CONFIG.TILE_URL_SAT,{maxZoom:19,attribution:CONFIG.TILE_ATTR_SAT}).addTo(baseSat);L.tileLayer(CONFIG.TILE_URL_SAT_REF,{maxZoom:19,opacity:.9}).addTo(baseSat);}
+
+/* 3 кольца */
+if(map){
+  ringsLayer=L.layerGroup();
+  L.circle(CONFIG.KYIV,{radius:500*1000,color:"#3b82f6",weight:1.6,opacity:.85,fill:false,dashArray:"8 8",interactive:false}).addTo(ringsLayer);
+  L.circle(CONFIG.KYIV,{radius:250*1000,color:"#dc2626",weight:1.6,opacity:.9,fill:false,dashArray:"8 8",interactive:false}).addTo(ringsLayer);
+  L.circleMarker(CONFIG.KYIV,{radius:10,color:"#dc2626",weight:2,opacity:1,fillColor:"#dc2626",fillOpacity:.25,interactive:false}).addTo(ringsLayer);
+  L.circleMarker(CONFIG.KYIV,{radius:4,color:"#dc2626",weight:2,opacity:1,fillColor:"#dc2626",fillOpacity:1,interactive:false}).addTo(ringsLayer);
+  const size=0.02;
+  L.polyline([[CONFIG.KYIV[0]-size,CONFIG.KYIV[1]],[CONFIG.KYIV[0]+size,CONFIG.KYIV[1]]],{color:"#dc2626",weight:1.6,opacity:.9,interactive:false}).addTo(ringsLayer);
+  L.polyline([[CONFIG.KYIV[0],CONFIG.KYIV[1]-size],[CONFIG.KYIV[0],CONFIG.KYIV[1]+size]],{color:"#dc2626",weight:1.6,opacity:.9,interactive:false}).addTo(ringsLayer);
+  if(ringsVisible)ringsLayer.addTo(map);
+}
+
+/* SVG */
+function uavSvg(color){const c=color||"#ffffff";const stroke=(c==="#1f2937")?"#f9fafb":"#1a1a1a";return`<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><path d="M20 4 L30 22 L24 24 L24 32 L20 30 L16 32 L16 24 L10 22 Z" fill="${c}" stroke="${stroke}" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 20 L6 26 L10 27 Z" fill="${c}" stroke="${stroke}" stroke-width="1.4" stroke-linejoin="round"/><path d="M28 20 L34 26 L30 27 Z" fill="${c}" stroke="${stroke}" stroke-width="1.4" stroke-linejoin="round"/></svg>`;}
+function reconSvg(color){const c=color||"#3b82f6";const stroke=(c==="#1f2937")?"#f9fafb":"#1a1a1a";return`<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><path d="M20 4 L30 22 L24 24 L24 32 L20 30 L16 32 L16 24 L10 22 Z" fill="${c}" stroke="${stroke}" stroke-width="1.8" stroke-linejoin="round"/><circle cx="20" cy="18" r="3" fill="#fff" stroke="${stroke}" stroke-width="0.8"/></svg>`;}
+function geranSvg(color){const c=color||"#dc2626";const stroke=(c==="#1f2937")?"#f9fafb":"#7f1d1d";return`<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><path d="M20 4 L30 22 L24 24 L24 32 L20 30 L16 32 L16 24 L10 22 Z" fill="${c}" stroke="${stroke}" stroke-width="1.8" stroke-linejoin="round"/><circle cx="20" cy="18" r="2.5" fill="#fff" stroke="${stroke}" stroke-width="0.8"/></svg>`;}
+function jetDroneSvg(color){const c=color||"#dc2626";const stroke=(c==="#1f2937")?"#f9fafb":"#450a0a";return`<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><path d="M20 4 L30 22 L24 24 L24 32 L20 30 L16 32 L16 24 L10 22 Z" fill="${c}" stroke="${stroke}" stroke-width="1.8" stroke-linejoin="round"/><circle cx="20" cy="18" r="3" fill="#fff" stroke="${stroke}" stroke-width="0.8"/><path d="M14 6 L14 12 M26 6 L26 12" stroke="#fbbf24" stroke-width="1.6" stroke-linecap="round"/></svg>`;}
+function rocketSvg(c){return`<svg viewBox="0 0 24 40" xmlns="http://www.w3.org/2000/svg"><path d="M12 1 C14 1 16 6 16 12 L16 26 L19 32 L16 30 L16 34 L12 38 L8 34 L8 30 L5 32 L8 26 L8 12 C8 6 10 1 12 1 Z" fill="${c||"#dc2626"}" stroke="#1a1a1a" stroke-width="1.1" stroke-linejoin="round"/><circle cx="12" cy="10" r="1.6" fill="#fff" stroke="#1a1a1a" stroke-width="0.6"/></svg>`;}
+function zirconSvg(){return`<svg viewBox="0 0 28 40" xmlns="http://www.w3.org/2000/svg"><path d="M14 1 C18 4 20 10 20 16 L20 27 L25 35 L20 33 L20 38 L14 40 L8 38 L8 33 L3 35 L8 27 L8 16 C8 10 10 4 14 1 Z" fill="#dc2626" stroke="#450a0a" stroke-width="1.3" stroke-linejoin="round"/></svg>`;}
+function kabSvg(c){return`<svg viewBox="0 0 36 20" xmlns="http://www.w3.org/2000/svg"><path d="M4 10 C4 6 6 4 10 4 L20 4 L28 2 L32 6 L34 10 L32 14 L28 18 L20 16 L10 16 C6 16 4 14 4 10 Z" fill="${c}" stroke="#1a1a1a" stroke-width="1.2"/></svg>`;}
+function umpbSvg(c){return`<svg viewBox="0 0 44 16" xmlns="http://www.w3.org/2000/svg"><path d="M4 8 C4 5 6 3 10 3 L24 3 L30 1 L36 3 L40 8 L36 13 L30 15 L24 13 L10 13 C6 13 4 11 4 8 Z" fill="${c}" stroke="#1a1a1a" stroke-width="1.2"/></svg>`;}
+function fpvSvg(color){const c=color||"#ca8a04";return`<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="10" width="6" height="4" rx="1" fill="${c}"/><circle cx="5" cy="8" r="2.3" fill="${c}"/><circle cx="19" cy="8" r="2.3" fill="${c}"/><circle cx="5" cy="16" r="2.3" fill="${c}"/><circle cx="19" cy="16" r="2.3" fill="${c}"/></svg>`;}
+function launcherSvg(c){return`<svg viewBox="0 0 40 32" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="20" width="36" height="8" rx="2" fill="#334155"/><line x1="10" y1="18" x2="34" y2="4" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/></svg>`;}
+function impactSvg(){return`<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="20" r="9" fill="#dc2626"/><circle cx="20" cy="20" r="4" fill="#fbbf24"/></svg>`;}
+function downSvg(){return`<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="15" fill="#dc2626"/><path d="M18 8 L18 22 M12 18 L18 26 L24 18" stroke="#fff" stroke-width="3" fill="none"/></svg>`;}
+function shotSvg(){return`<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="15" fill="#16a34a"/><path d="M10 18 L15 24 L26 10" stroke="#fff" stroke-width="3.4" fill="none"/></svg>`;}
+function fireSvg(){return`<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg"><circle cx="18" cy="18" r="15" fill="#ea580c"/><path d="M18 7 C20 12 24 13 24 19 C24 24 21 27 18 27 C15 27 12 24 12 19 C12 15 14 13 15 10 C16 13 17 14 18 7 Z" fill="#fde047"/></svg>`;}
+function svgTu160(){return`<svg viewBox="0 0 44 40" xmlns="http://www.w3.org/2000/svg"><path d="M22 4 L24 15 L40 20 L40 23 L24 22 L24 30 L28 34 L26 36 L22 33 L18 36 L16 34 L20 30 L20 22 L4 23 L4 20 L20 15 Z" fill="#facc15" stroke="#78350f" stroke-width="1.2" stroke-linejoin="round"/></svg>`;}
+function svgTu95(){return`<svg viewBox="0 0 44 40" xmlns="http://www.w3.org/2000/svg"><path d="M22 4 L24 15 L40 20 L40 23 L24 22 L24 30 L28 34 L26 36 L22 33 L18 36 L16 34 L20 30 L20 22 L4 23 L4 20 L20 15 Z" fill="#fbbf24" stroke="#78350f" stroke-width="1.2" stroke-linejoin="round"/></svg>`;}
+function svgTu22(){return`<svg viewBox="0 0 44 40" xmlns="http://www.w3.org/2000/svg"><path d="M22 3 L25 14 L38 18 L38 22 L25 22 L25 30 L30 34 L28 36 L22 33 L16 36 L14 34 L19 30 L19 22 L6 22 L6 18 L19 14 Z" fill="#f97316" stroke="#7c2d12" stroke-width="1.2" stroke-linejoin="round"/></svg>`;}
+function svgMig31k(){return`<svg viewBox="0 0 44 40" xmlns="http://www.w3.org/2000/svg"><path d="M22 3 L25 14 L38 18 L38 22 L25 22 L25 30 L30 34 L28 36 L22 33 L16 36 L14 34 L19 30 L19 22 L6 22 L6 18 L19 14 Z" fill="#e11d48" stroke="#1a1a1a" stroke-width="1.2" stroke-linejoin="round"/></svg>`;}
+function svgSu30(){return`<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><path d="M20 4 L22 14 L36 18 L36 22 L22 22 L22 28 L26 32 L24 34 L20 31 L16 34 L14 32 L18 28 L18 22 L4 22 L4 18 L18 14 Z" fill="#fb923c" stroke="#7c2d12" stroke-width="1.2" stroke-linejoin="round"/></svg>`;}
+function svgForStrategic(icon){if(icon==="tu160")return svgTu160();if(icon==="tu95")return svgTu95();if(icon==="tu22")return svgTu22();if(icon==="mig31k")return svgMig31k();if(icon==="su30")return svgSu30();return svgTu95();}
+const TYPE_META={uav:{color:"#ffffff",label:"БПЛА",canRecolor:true},recon:{color:"#3b82f6",label:"Розв",baseColor:"#3b82f6"},geran2:{color:"#dc2626",label:"Герань-2",isGeran:true,baseColor:"#dc2626"},geran3:{color:"#dc2626",label:"Герань-3",isGeran:true,baseColor:"#dc2626"},geran4:{color:"#dc2626",label:"Герань-4",isGeran:true,baseColor:"#dc2626"},geran5:{color:"#b91c1c",label:"Герань-5",isGeran:true,isGeran5:true,baseColor:"#b91c1c"},jet_drone:{color:"#b91c1c",label:"Реакт. БПЛА",isJetDrone:true,baseColor:"#b91c1c"},fpv:{color:"#ca8a04",label:"FPV",canRecolor:true},missile:{color:"#dc2626",label:"КР",isMissile:true},ballistic:{color:"#b91c1c",label:"Бал",isMissile:true},banderol:{color:"#dc2626",label:"S8000",isMissile:true},kab:{color:"#dc2626",label:"КАБ",isMissile:true},umpb:{color:"#7c2d12",label:"УМПБ-5",isMissile:true},mig31k:{color:"#e11d48",label:"МиГ-31К",isMig:true},strategic_aviation:{color:"#ea580c",label:"Стратег",isStrategic:true},zircon:{color:"#dc2626",label:"Циркон",isMissile:true,isZircon:true},unknown:{color:"#475569",label:"?"}};
+const getMeta=t=>TYPE_META[t]||TYPE_META.unknown;
+function typeLabel(t){if(t._exactName)return t._exactName;if(t._zircon||t.type==="zircon")return"Циркон";if(t._geran5||t.type==="geran5")return"Герань-5";if(t.type==="geran4")return"Герань-4";if(t.type==="geran3")return"Герань-3";if(t.type==="geran2")return"Герань-2";const x=t.type;if(x==="missile")return"КР";if(x==="ballistic")return"Бал";if(x==="banderol")return"S8000";if(x==="jet_drone")return"Реакт. БПЛА";if(x==="kab")return"КАБ";if(x==="umpb")return"УМПБ";if(x==="fpv")return"FPV";if(x==="uav")return"БПЛА";if(x==="recon")return"Розв";if(x==="mig31k")return"МиГ";return"";}
+const SIZE_BASE=28;
+function confirmBadgeClass(n,tw){if(n>=5||tw>=8)return"max";if(n>=3||tw>=4.5)return"strong";if(n>=2&&tw>=2)return"";if(n>=2)return"medium";return"low";}
+function confirmBoostClass(n,tw){if(n>=5||tw>=8)return"confirm-5";if(n>=3||tw>=4.5)return"confirm-3";if(n>=2&&tw>=2)return"confirm-2";return"";}
+function channelsListHtml(set){const items=[...set].map(ch=>{const cls=channelClass(ch);const w=channelWeight(ch);let label=ch;if(cls==="prio"||w>=1.5)label=`⭐ ${ch}`;else if(w<1)label=`⚠ ${ch}`;return`<span class="ch ${cls}">${esc(label)}</span>`;});return`<div class="popup-channels"><b>Джерела (${set.size}):</b><br>${items.join(" ")}</div>`;}
+function totalWeightOf(set){let w=0;for(const ch of set)w+=channelWeight(ch);return w;}
+function hasPrioritySource(channels){for(const ch of channels)if(isPriorityChannel(ch))return true;return false;}
+function isRocketWarning(type,stage){return CONFIG.ROCKET_WARNING_TYPES.has(type)&&(stage==="threat"||stage==="launch-warning");}
+function isUavSirenClass(type){return type==="uav"||type==="geran5"||type==="geran4"||type==="geran3"||type==="geran2"||type==="recon"||type==="fpv"||type==="jet_drone";}
+function iconColorFor(type){const meta=getMeta(type);if(type==="jet_drone"||type==="geran5")return"#dc2626";if(meta.canRecolor)return currentUavColor();if(meta.baseColor)return meta.baseColor;return meta.color;}
+function svgForType(type){const meta=getMeta(type);const col=iconColorFor(type);if(type==="fpv")return fpvSvg(col);if(type==="zircon")return zirconSvg();if(type==="kab")return kabSvg(col);if(type==="umpb")return umpbSvg(col);if(type==="mig31k")return svgMig31k();if(type==="strategic_aviation")return svgTu95();if(type==="launcher")return launcherSvg(col);if(type==="impact")return impactSvg();if(type==="missile"||type==="ballistic"||type==="banderol")return rocketSvg(col);if(type==="recon")return reconSvg(meta.baseColor||"#3b82f6");if(type==="jet_drone")return jetDroneSvg("#dc2626");if(type==="geran2"||type==="geran3"||type==="geran4")return geranSvg(col);if(type==="geran5")return geranSvg("#dc2626");if(type==="uav")return uavSvg(col);return uavSvg(col);}
+function makeIcon(cls,heading,confirmN,totalWeight,stale,uncertain,aiLevel,stage,inSiren,hasPriority,isSimulated){const meta=getMeta(cls.type);const svg=svgForType(cls.type);const rot=heading!=null?heading:0;const classes=["threat-icon"];if(cls._falling)classes.push("falling");if(stage==="threat")classes.push("threat-pulse");if(stale)classes.push("stale");if(uncertain)classes.push("uncertain");const boost=confirmBoostClass(confirmN,totalWeight);if(boost)classes.push(boost);if(isRocketWarning(cls.type,stage))classes.push("rocket-warning");if(inSiren&&isUavSirenClass(cls.type))classes.push("uav-siren");if((cls.type==="ballistic"||cls.type==="zircon")&&(stage==="threat"||stage==="launch"))classes.push("ballistic-alarm");if(meta.isJetDrone)classes.push("jet-pulse");if(meta.isGeran)classes.push("geran-pulse");if(hasPriority)classes.push("priority-star");let confirmHtml="";if(confirmN&&confirmN>=CONFIG.MIN_CHANNELS_CONFIRM){confirmHtml=`<div class="confirm-badge ${confirmBadgeClass(confirmN,totalWeight||0)}">${confirmN}</div>`;}else if(confirmN===1&&stage==="threat"){confirmHtml=`<div class="confirm-badge pending">⏱</div>`;}const countHtml=cls._count?`<div class="count-badge">${cls._count}</div>`:"";return L.divIcon({className:"",html:`<div class="threat-wrap"><div class="threat-rotate" style="transform:rotate(${rot}deg)"><div class="${classes.join(" ")}">${svg}</div></div>${confirmHtml}${countHtml}</div>`,iconSize:[SIZE_BASE,SIZE_BASE],iconAnchor:[SIZE_BASE/2,SIZE_BASE/2],popupAnchor:[0,-SIZE_BASE/2]});}
+function launcherIcon(stage,name,confirmN,totalWeight,aiLevel,hasPriority){const classes=["threat-icon"];if(stage==="threat")classes.push("threat-pulse");const boost=confirmBoostClass(confirmN,totalWeight);if(boost)classes.push(boost);if(aiLevel==="critical")classes.push("ai-critical");if(hasPriority)classes.push("priority-star");let confirmHtml="";if(confirmN>=CONFIG.MIN_CHANNELS_CONFIRM)confirmHtml=`<div class="confirm-badge ${confirmBadgeClass(confirmN,totalWeight||0)}">${confirmN}</div>`;else if(confirmN===1)confirmHtml=`<div class="confirm-badge pending">⏱</div>`;return L.divIcon({className:"",html:`<div class="threat-wrap"><div class="threat-rotate" style="transform:rotate(0deg)"><div class="${classes.join(" ")}">${launcherSvg("#dc2626")}</div></div>${confirmHtml}</div>`,iconSize:[SIZE_BASE,SIZE_BASE],iconAnchor:[SIZE_BASE/2,SIZE_BASE/2],popupAnchor:[0,-SIZE_BASE/2]});}
+function impactSmallIcon(){return L.divIcon({className:"",html:`<div class="impact-marker-icon">💥</div>`,iconSize:[20,20],iconAnchor:[10,10]});}
+function unknownArrivalIcon(){return L.divIcon({className:"",html:`<div class="arrival-unknown">❓</div>`,iconSize:[30,30],iconAnchor:[15,15]});}
+function impactBigIcon(kind){let inner;if(kind==="down")inner=`<div class="impact-marker down">${downSvg()}</div>`;else if(kind==="shot")inner=`<div class="impact-marker shot">${shotSvg()}</div>`;else if(kind==="fire")inner=`<div class="impact-marker fire">${fireSvg()}</div>`;else if(kind==="unknown")inner=`<div class="impact-marker unknown"><span class="arrival-unknown">❓</span></div>`;else inner=`<div class="impact-marker hit">${impactSvg()}</div>`;return L.divIcon({className:"",html:inner,iconSize:[36,36],iconAnchor:[18,18]});}
+function makeStrategicIcon(typeMeta,count,isTraining,etaMin){const svg=svgForStrategic(typeMeta.icon);const cls=["strat-icon"];if(isTraining)cls.push("training");else cls.push("active");const countHtml=count&&count>1?`<div class="strat-badge">${count}</div>`:"";const etaHtml=(etaMin!=null&&etaMin<240)?`<div class="strat-eta-badge">⏱ ${formatEta(etaMin)}</div>`:"";return L.divIcon({className:"",html:`<div class="strat-wrap"><div class="${cls.join(" ")}">${svg}</div>${countHtml}${etaHtml}</div>`,iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-18]});}
+
+/* POWER */
+function voltageColor(v){if(v==="750")return"#dc2626";if(v==="330")return"#f97316";if(v==="110")return"#facc15";return"#94a3b8";}
+function voltageRadius(v){if(v==="750")return 9;if(v==="330")return 7;if(v==="110")return 5;return 4;}
+function rebuildPowerLayer(){if(!map)return;if(powerLayer){map.removeLayer(powerLayer);powerLayer=null;}if(!powerVisible)return;powerLayer=L.layerGroup();for(const[name,lat,lng,voltage,district,source]of powerSubstations){const color=voltageColor(voltage);const radius=voltageRadius(voltage);const marker=L.circleMarker([lat,lng],{radius,color,weight:2,fillColor:color,fillOpacity:0.7});marker.bindPopup(`<div class="popup-title" style="color:${color}">⚡ ${esc(name)}</div><div class="popup-meta">Напруга: <b>${voltage} кВ</b><br>Район: <b>${esc(district)}</b><br>Джерело: ${esc(source)}</div><div class="popup-meta" style="margin-top:4px">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>`,CONFIG.POPUP_OPTS);marker.addTo(powerLayer);}powerLayer.addTo(map);}
+function togglePowerLayer(){powerVisible=!powerVisible;try{localStorage.setItem(POWER_VIS_KEY,powerVisible?"1":"0");}catch(e){}const b=$("btnPower");if(b)b.classList.toggle("on",powerVisible);rebuildPowerLayer();showToast(powerVisible?"⚡ Підстанції Києва УВІМК":"⚡ Підстанції Києва ВИКЛ");}
+
+/* INFRA */
+function infraIconFor(kind,subtype){if(kind==="bridge"){let emoji="🌉";if(subtype==="railway")emoji="🚆";else if(subtype==="pedestrian")emoji="🚶";else if(subtype==="metro")emoji="🚇";else if(subtype==="overpass"||subtype==="viaduct")emoji="🛣️";return L.divIcon({className:"infra-marker",html:`<div class="infra-bridge">${emoji}</div>`,iconSize:[22,22],iconAnchor:[11,11]});}if(kind==="energy"){let emoji="⚡";if(subtype==="hydro")emoji="💧";else if(subtype==="heat_power"||subtype==="power_plant")emoji="🏭";else if(subtype==="grid_node")emoji="🔌";else if(subtype==="power_substation")emoji="🔌";return L.divIcon({className:"infra-marker",html:`<div class="infra-energy">${emoji}</div>`,iconSize:[22,22],iconAnchor:[11,11]});}return null;}
+function buildBridgePopup(b){const tMap={bridge:"Міст",overpass:"Шляхопровід",viaduct:"Естакада",railway:"Залізничний",pedestrian:"Пішохідний",metro:"Метроміст",local:"Локальний"};return`<div class="popup-title type-recon">🌉 ${esc(b.name)}</div><div class="popup-meta">Тип: <b>${tMap[b.type]||b.type}</b><br>Район: <b>${esc(b.district||"—")}</b><br>Джерело: ${esc(b.source||"—")}</div><div class="popup-meta" style="margin-top:4px">${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}</div>`;}
+function buildEnergyPopup(e){return`<div class="popup-title type-fpv">⚡ ${esc(e.name)}</div><div class="popup-meta">Тип: <b>${esc(e.type)}</b><br>Розташування: <b>${esc(e.location||e.district||"—")}</b></div><div class="popup-meta" style="margin-top:4px">${e.lat.toFixed(5)}, ${e.lng.toFixed(5)}</div>`;}
+function rebuildInfraLayer(){if(!map||!infraLayer)return;infraLayer.clearLayers();infraMarkers=[];if(infraMode===0){if(map.hasLayer(infraLayer))map.removeLayer(infraLayer);const lg=$("infraLegend");if(lg)lg.classList.remove("show");return;}if(!map.hasLayer(infraLayer))infraLayer.addTo(map);const lg=$("infraLegend");if(lg)lg.classList.add("show");const showBridges=infraMode===1||infraMode===3;const showEnergy=infraMode===2||infraMode===3;if(showBridges){for(const b of kyivBridges){const m=L.marker([b.lat,b.lng],{icon:infraIconFor("bridge",b.type),zIndexOffset:200});m.bindPopup(buildBridgePopup(b),CONFIG.POPUP_OPTS);m.addTo(infraLayer);infraMarkers.push(m);}}if(showEnergy){for(const e of energyDatabase){const m=L.marker([e.lat,e.lng],{icon:infraIconFor("energy",e.type),zIndexOffset:210});m.bindPopup(buildEnergyPopup(e),CONFIG.POPUP_OPTS);m.addTo(infraLayer);infraMarkers.push(m);}for(const i of infrastructureObjects){const m=L.marker([i.lat,i.lng],{icon:infraIconFor("energy",i.type),zIndexOffset:215});m.bindPopup(buildEnergyPopup(i),CONFIG.POPUP_OPTS);m.addTo(infraLayer);infraMarkers.push(m);}}}
+function cycleInfraMode(){infraMode=(infraMode+1)%4;try{localStorage.setItem(INFRA_MODE_KEY,String(infraMode));}catch(e){}const b=$("btnInfra");if(b){b.classList.remove("on","infrastructure","energy","incidents");if(infraMode===1)b.classList.add("infrastructure");else if(infraMode===2)b.classList.add("energy");else if(infraMode===3)b.classList.add("on");}rebuildInfraLayer();const names=["ВИКЛ","Мости","Енергетика","Все"];showToast("🏗 Інфраструктура: "+names[infraMode]);}
+
+/* SETTLEMENTS */
+function buildSettlementsLayer(){if(!map||!settlementsLayer)return;settlementsLayer.clearLayers();settlementMarkers=[];const z=map.getZoom();if(z<8)return;const max=z>=12?9999:(z>=10?500:200);let count=0;for(const rec of SETTLEMENT_INDEX.cities){if(count>=max)break;let size="";if(rec.type==="c")size="city";else if(rec.type==="district"||rec.type==="v")size="raion";const icon=L.divIcon({className:"settlement-marker",html:`<div class="settlement-dot ${size}"></div>`,iconSize:[8,8],iconAnchor:[4,4]});const m=L.marker([rec.lat,rec.lon],{icon,interactive:false,zIndexOffset:100});m.addTo(settlementsLayer);settlementMarkers.push(m);count++;}}
+function updateSettlementsVisibility(){if(!map||!settlementsLayer)return;const z=map.getZoom();if(settlementsVisible&&z>=8){if(!map.hasLayer(settlementsLayer))settlementsLayer.addTo(map);buildSettlementsLayer();}else{if(map.hasLayer(settlementsLayer))map.removeLayer(settlementsLayer);}}
+function toggleSettlementsLayer(){settlementsVisible=!settlementsVisible;try{localStorage.setItem(SETTLEMENTS_VIS_KEY,settlementsVisible?"1":"0");}catch(e){}const b=$("btnSettlements");if(b)b.classList.toggle("on",settlementsVisible);updateSettlementsVisibility();showToast(settlementsVisible?"🏘 Населені пункти УВІМК":"🏘 Населені пункти ВИКЛ");}
+function toggleStrategicLayer(){strategicVisible=!strategicVisible;try{localStorage.setItem(STRATEGIC_VIS_KEY,strategicVisible?"1":"0");}catch(e){}const b=$("btnStrategic");if(b)b.classList.toggle("on",strategicVisible);if(strategicVisible){if(strategicLayer&&!map.hasLayer(strategicLayer))strategicLayer.addTo(map);rebuildStrategicPanel();showToast("✈️ Стратегічна авіація УВІМК");}else{if(strategicLayer&&map.hasLayer(strategicLayer))map.removeLayer(strategicLayer);const p=$("strategicPanel");if(p)p.classList.remove("show");showToast("✈️ Стратегічна авіація ВИКЛ");}}
+if(map)map.on("zoomend",()=>{if(settlementsVisible)updateSettlementsVisibility();});
+
+/* CHAIN + DISMISS */
+const chainAnimations=new Map();
+function animateChainTransition(chainKey,from,to,marker,cls,confirmN,totalW,uncertain,aiLevel,stage,inSiren,hasPriority,isSimulated,onDone){const dist=haversineKm(from.lat,from.lon,to.lat,to.lon);let dur=dist*CONFIG.CHAIN_TRANSITION_MS_PER_KM;dur=Math.max(CONFIG.CHAIN_TRANSITION_MIN_MS,Math.min(CONFIG.CHAIN_TRANSITION_MAX_MS,dur));const startTime=Date.now();const heading=bearingBetween(from.lat,from.lon,to.lat,to.lon);const prev=chainAnimations.get(chainKey);if(prev&&prev.rafId)cancelAnimationFrame(prev.rafId);const state={from,to,startTime,duration:dur,marker,cls,confirmN,totalW,uncertain,aiLevel,stage,inSiren,hasPriority,isSimulated,heading,onDone,rafId:null};chainAnimations.set(chainKey,state);function tick(){const now=Date.now();const t=Math.min(1,(now-startTime)/dur);const et=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;const lat=from.lat+(to.lat-from.lat)*et;const lon=from.lon+(to.lon-from.lon)*et;try{marker.setLatLng([lat,lon]);marker.setIcon(makeIcon(cls,heading,confirmN,totalW,false,uncertain,aiLevel,stage,inSiren,hasPriority,isSimulated));}catch(e){}if(t<1){state.rafId=requestAnimationFrame(tick);}else{chainAnimations.delete(chainKey);if(onDone)try{onDone();}catch(e){}}}state.rafId=requestAnimationFrame(tick);}
+const dismissedKeys=new Map();
+function isDismissed(key){if(!key)return false;const t=dismissedKeys.get(key);if(!t)return false;if(Date.now()-t>CONFIG.DISMISS_TTL_MS){dismissedKeys.delete(key);return false;}return true;}
+function dismissKey(key){if(!key)return;dismissedKeys.set(key,Date.now());if(dismissedKeys.size>800){const cutoff=Date.now()-CONFIG.DISMISS_TTL_MS;for(const[k,t]of dismissedKeys)if(t<cutoff)dismissedKeys.delete(k);}}
+const tracks=new Map();const trails=new Map();const msgMarkers=new Map();const impactMarkers=new Map();const impactReports=new Map();const arrivals=new Map();const activeWarnings=new Map();const strategicMarkers=new Map();const strategicActivity=new Map();const lastPlaceByChannel={};const firedSoundKeys=new Map();
+
+/* MASS */
+const MASS_TRIGGER_RE=new RegExp(["пуск[и]?\\s+реактивних\\s+з\\s+орл","пуски\\s+реактивних","залп[и]?\\s+реактивних","масован[а-яіїєґ]*\\s+пуск","массированн[а-яіїєґ]*\\s+пуск","одночасн[а-яїєґ]*\\s+пуск","підвіз\\s+балістичних","подвоз\\s+баллистических","фіксуємо\\s+підвіз","фиксируем\\s+подвоз","іскандер[-–\\s]?м","искандер[-–\\s]?м","кн[-–\\s]?23","kn[-–\\s]?23","доставка\\s+реактивних\\s+бпла","доставка\\s+шахед","доставка\\s+шахедів","шахед[іи]?\\s+на\\s+аеродром","шахед[ы]?\\s+на\\s+аэродром"].join("|"),"i");
+const MASS_AIRFIELDS=[
+  {key:"orel_yuzhny",re:/орел[-–\s]?південн|орёл[-–\s]?южн/i,name:"Орел-Южный",lat:52.75,lon:36.20,region:"Орловська"},
+  {key:"donetsk",re:/донецьк|донецк/i,name:"Донецк",lat:48.07,lon:37.74,region:"Донецька"},
+  {key:"gvardeyskoye",re:/гвардійськ|гвардейск/i,name:"Гвардейское",lat:45.10,lon:33.98,region:"Крим"},
+  {key:"bryansk",re:/брянськ|брянск/i,name:"Брянск",lat:53.25,lon:34.37,region:"Брянська"},
+  {key:"kursk",re:/курськ|курск/i,name:"Курск",lat:51.73,lon:36.19,region:"Курська"},
+  {key:"voronezh",re:/воронеж/i,name:"Воронеж",lat:51.67,lon:39.18,region:"Воронезька"}
+];
+function detectMassActivity(text){if(!text)return null;if(!MASS_TRIGGER_RE.test(text))return null;const airports=[];for(const a of MASS_AIRFIELDS)if(a.re.test(text))airports.push(a);const lines=[];let title="МАСОВАНА ЗАГРОЗА";let icon="🚀";if(/пуск|залп|масован|массированн|одночасн/i.test(text)&&/реактивн/i.test(text)){title="🚀 ПУСКИ РЕАКТИВНИХ БПЛА";icon="🚀";const m=text.match(/з\\s+([А-ЯІЇЄҐа-яіїєґ'’\\-\\s]+)/i);if(m)lines.push(`Напрямок: <b>${esc(m[1].trim())}</b>`);}if(/підвіз|подвоз|фіксуємо|фиксируем|іскандер|искандер|кн[-–\\s]?23|kn[-–\\s]?23|балістичних|баллистических/i.test(text)){title="🚀 ПІДВІЗ БАЛІСТИКИ";icon="🚀";if(/курськ|курск/i.test(text))lines.push("📍 <b>Курська обл.</b> — Іскандер-М");if(/брянськ|брянск/i.test(text))lines.push("📍 <b>Брянська обл.</b> — Іскандер-М");if(/воронеж/i.test(text))lines.push("📍 <b>Воронезька обл.</b> — KN-23");}if(/доставка|шахед|аеродром|аэродром/i.test(text)&&/шахед|реактивн/i.test(text)){title="🛸 ДОСТАВКА ШАХЕДІВ";icon="🛸";for(const a of airports){lines.push(`🛫 <b>${esc(a.name)}</b> (${esc(a.region)})`);}}if(!lines.length)return null;return{title,icon,lines,airports,text:text.slice(0,300)};}
+function showMassBanner(info){const el=$("massBanner");if(!el)return;const icon=$("massBannerIcon"),title=$("massBannerTitle"),l1=$("massBannerLine1"),l2=$("massBannerLine2"),l3=$("massBannerLine3");if(icon)icon.textContent=info.icon||"🚀";if(title)title.textContent=info.title||"МАСОВАНА ЗАГРОЗА";const lines=info.lines||[];if(l1){l1.innerHTML=lines[0]||"—";l1.style.display="block";}if(l2){l2.innerHTML=lines[1]||"";l2.style.display=lines[1]?"block":"none";}if(l3){l3.innerHTML=lines[2]||"";l3.style.display=lines[2]?"block":"none";}el.classList.add("show");massBannerActive=true;if(massBannerTimer)clearTimeout(massBannerTimer);massBannerTimer=setTimeout(()=>{hideMassBanner();},CONFIG.MASS_BANNER_TTL_MS);if(isPriorityChannel(info.channel||""))playAlertSound(true);scheduleFeedUpdate();}
+function hideMassBanner(){const el=$("massBanner");if(el)el.classList.remove("show");massBannerActive=false;if(massBannerTimer){clearTimeout(massBannerTimer);massBannerTimer=null;}}
+function processMassActivity(text,ch,msgMs){if(!text)return;if(!isPriorityChannel(ch)&&channelWeight(ch)<1.3)return;const info=detectMassActivity(text);if(!info)return;info.channel=ch;info.ts=msgMs;showMassBanner(info);}
+
+/* STRATEGIC */
+function buildStrategicPopup(item){const lines=[];lines.push(`<div class="popup-title type-strategic">✈️ ${esc(item.typeMeta.label)}${item.count>1?` ×${item.count}`:""}</div>`);lines.push(`<div style="font-size:.72rem">${esc(item.sampleText.slice(0,220))}</div>`);const info=[];info.push(`<b>Аеродром:</b> ${esc(item.airport.name)} (${esc(item.airport.region)})`);if(item.isTraining)info.push(`<b>Статус:</b> <span style="color:#facc15">🟡 Тренування</span>`);else info.push(`<b>Статус:</b> <span style="color:#dc2626">🔴 Бойова активність</span>`);const eta=etaStrategicToKyiv(item.airport.lat,item.airport.lon,item.typeMeta.speedKmh);info.push(`<b>Відстань до Києва:</b> ${Math.round(eta.distKm)} км`);info.push(`<b>Підліт:</b> ${formatEta(eta.etaMin)} (за ${item.typeMeta.speedKmh} км/г)`);lines.push(`<div class="popup-meta" style="margin-top:5px">${info.join("<br>")}</div>`);if(item.channels&&item.channels.size)lines.push(channelsListHtml(item.channels));lines.push(`<button type="button" class="popup-remove-btn" data-remove-kind="strategic" data-remove-key="${esc(item.key)}">🗑 Видалити маркер</button>`);return lines.join("");}
+const STRATEGIC_AIRPORTS=[{key:"engels2",re:/энгельс[-–\s]?2|енгельс[-–\s]?2|engels/i,name:"Енгельс-2",lat:51.48,lon:46.21,region:"Саратовська"},{key:"ukrainka",re:/украинка|українка/i,name:"Українка",lat:51.17,lon:128.45,region:"Амурська"},{key:"olenya",re:/олень[яи]|олень[яі]/i,name:"Оленья",lat:68.15,lon:33.47,region:"Мурманська"},{key:"dyagilevo",re:/дягилево|дягілево/i,name:"Дягилево",lat:54.64,lon:39.57,region:"Рязанська"},{key:"ahtubinsk",re:/ахтубинск|ахтубінськ/i,name:"Ахтубинск",lat:48.28,lon:46.17,region:"Астраханська"},{key:"mozdok",re:/моздок/i,name:"Моздок",lat:43.79,lon:44.61,region:"Осетія"},{key:"belaya",re:/белая|біла\s+авіабаза|белая\s+авиабаза/i,name:"Белая",lat:52.92,lon:103.55,region:"Іркутська"},{key:"savasleyka",re:/саваслейк/i,name:"Саваслейка",lat:55.42,lon:42.30,region:"Нижегородська"},{key:"shaykovka",re:/шайковк/i,name:"Шайковка",lat:54.23,lon:34.37,region:"Калузька"}];
+function findStrategicAirbases(t){const f=[];for(const b of STRATEGIC_AIRPORTS)if(b.re.test(t||""))f.push(b);return f;}
+const STRATEGIC_TYPES={TU160:{re:/ту-?\s*160/i,type:"Tu-160",label:"Ту-160",speedKmh:2200,icon:"tu160"},TU95:{re:/ту-?\s*95/i,type:"Tu-95MS",label:"Ту-95МС",speedKmh:800,icon:"tu95"},TU22M3:{re:/ту-?\s*22\s*м?3?/i,type:"Tu-22M3",label:"Ту-22М3",speedKmh:2300,icon:"tu22"},MIG31K:{re:/міг-?\s*31|миг-?\s*31/i,type:"MiG-31K",label:"МиГ-31К",speedKmh:3000,icon:"mig31k"},SU30:{re:/су-?\s*30/i,type:"Su-30",label:"Су-30",speedKmh:2100,icon:"su30"}};
+function findStrategicAirport(text){for(const a of STRATEGIC_AIRPORTS)if(a.re.test(text||""))return a;return null;}
+function etaStrategicToKyiv(lat,lon,speedKmh){const d=haversineKm(lat,lon,CONFIG.KYIV[0],CONFIG.KYIV[1]);return{distKm:d,etaMin:d/speedKmh*60};}
+function buildSituationSummary(){const lines=[];lines.push(`🧩 Ланцюжків: ${trails.size}`);lines.push(`💥 Вибухів: ${impactMarkers.size}`);lines.push(`🏘 Населені пункти: ${KYIV_OBLAST_SETTLEMENTS.length}`);lines.push(`✈️ Стратегічних: ${strategicActivity.size}`);lines.push(`🌉 Мостів: ${kyivBridges.length}`);lines.push(`⚡ Енергооб'єктів: ${energyDatabase.length+infrastructureObjects.length}`);lines.push(`🔌 Підстанцій: ${powerSubstations.length}`);return lines.join("\n");}
+function showAIExplain(){$("aiModalBody").textContent=buildSituationSummary();$("aiModalTime").textContent="Оновлено: "+new Date().toLocaleTimeString("uk-UA");$("aiModalBackdrop").classList.add("show");}
+function hideAIExplain(){$("aiModalBackdrop").classList.remove("show");}
+
+/* WS/REST */
+const wsState={threats:new Map()};
+function wsScheduleReconnect(){if(wsReconnectTimer)return;wsReconnectTimer=setTimeout(()=>{wsReconnectTimer=null;wsConnect();},wsReconnectMs);wsReconnectMs=Math.min(wsReconnectMs*2,CONFIG.WS_RECONNECT_MAX_MS);}
+function wsConnect(){try{if(ws){try{ws.close();}catch(e){}ws=null;}ws=new WebSocket(CONFIG.WS_URL);ws.onopen=()=>{wsConnected=true;wsReconnectMs=CONFIG.WS_RECONNECT_MS;restFallbackActive=false;stopRestPolling();updateLiveBadge("ok");};ws.onmessage=(e)=>{try{wsHandleFrame(JSON.parse(e.data));}catch(err){}};ws.onerror=()=>{};ws.onclose=()=>{wsConnected=false;ws=null;updateLiveBadge("err");if(!restFallbackActive){restFallbackActive=true;startRestPolling();}wsScheduleReconnect();};}catch(e){if(!restFallbackActive){restFallbackActive=true;startRestPolling();}wsScheduleReconnect();}}
+function wsHandleFrame(env){if(!env||!env.type)return;switch(env.type){case "snapshot":{const data=env.data||{};wsState.threats.clear();for(const t of (data.threats||[]))if(t.id)wsState.threats.set(t.id,t);if(data.alerts){lastAlerts=data.alerts;try{syncAlertPolygons(data.alerts);}catch(e){}}applyThreatsFromWs();break;}case "upsert":{const t=env.data;if(t&&t.id){wsState.threats.set(t.id,t);applyThreatsFromWs();}break;}case "remove":{const data=env.data||{};if(data.id)wsState.threats.delete(data.id);applyThreatsFromWs();break;}case "alerts":{const data=env.data||{};lastAlerts=data;try{syncAlertPolygons(data);}catch(e){}break;}}}
+function applyThreatsFromWs(){try{syncThreats([...wsState.threats.values()]);}catch(e){}}
+async function fetchMessages(){try{const r=await fetch(CONFIG.API_MESSAGES);if(!r.ok)throw 0;const d=await r.json();try{syncMessageThreats(d.messages||[]);}catch(e){}}catch(e){}}
+async function fetchThreatsAndAlerts(){try{if(abortCtrl)abortCtrl.abort();abortCtrl=new AbortController();const signal=abortCtrl.signal;const[tr,al]=await Promise.all([fetch(CONFIG.API_THREATS,{signal}).then(r=>{if(!r.ok)throw new Error("threats "+r.status);return r.json();}),fetch(CONFIG.API_ALERTS,{signal}).then(r=>{if(!r.ok)throw new Error("alerts "+r.status);return r.json();})]);try{syncThreats(tr.threats||[]);}catch(e){}try{syncAlertPolygons(al);}catch(e){}updateLiveBadge("ok");}catch(e){if(e.name!=="AbortError")updateLiveBadge("err");}}
+async function restPollLoop(){await fetchThreatsAndAlerts();await fetchMessages();pollTimer=setTimeout(restPollLoop,CONFIG.POLL_MS);}
+function startRestPolling(){if(pollTimer)clearTimeout(pollTimer);restPollLoop();}
+function stopRestPolling(){if(pollTimer){clearTimeout(pollTimer);pollTimer=null;}if(abortCtrl){abortCtrl.abort();abortCtrl=null;}}
+function updateLiveBadge(state){if(state==="ok")setStatus(wsConnected?"ok":"warn",wsConnected?"ONLINE · WS":"ONLINE");else setStatus("err","ОФЛАЙН");}
+function setStatus(state,text){const dot=$("statusDot"),tt=$("statusText");if(!dot||!tt)return;dot.className="status-dot"+(state==="err"?" err":state==="warn"?" warn":"");tt.textContent=text||"ONLINE";}
+async function loadAlertGeo(signal){try{await Promise.all([fetch("https://neptun.in.ua/raions.geojson",{signal}).then(x=>x.json()),fetch("https://neptun.in.ua/oblasts.geojson",{signal}).then(x=>x.json())]);if(lastAlerts)syncAlertPolygons(lastAlerts);}catch(e){}}
+function syncAlertPolygons(alerts){if(!alerts)return;lastAlerts=alerts;for(const l of alertLayers){try{alertLayer.removeLayer(l);}catch(e){}}alertLayers=[];}
+function clearAll(){msgMarkers.forEach(o=>{if(o.marker&&msgThreatLayer)try{msgThreatLayer.removeLayer(o.marker);}catch(e){}if(o._simTimer)clearInterval(o._simTimer);});msgMarkers.clear();impactMarkers.forEach(o=>{if(o.marker&&impactLayer)try{impactLayer.removeLayer(o.marker);}catch(e){}});impactMarkers.clear();tracks.forEach(tr=>{if(tr.marker&&threatLayer)try{threatLayer.removeLayer(tr.marker);}catch(e){}});tracks.clear();for(const key of[...trails.keys()])closeTrail(key);trails.clear();activeWarnings.clear();impactReports.clear();arrivals.clear();strategicMarkers.forEach(m=>{try{strategicLayer.removeLayer(m.marker);}catch(e){}});strategicMarkers.clear();strategicActivity.clear();hideTopAlert();hideMassBanner();renderFeed();}
+function refreshAllIcons(){for(const tr of tracks.values()){try{tr.marker.setIcon(makeIcon(tr.threat,tr.heading||(tr._s&&tr._s.hdg),0,0,tr.stale,tr.uncertain,null,null,tr.inSiren,false,tr.isSimulated));}catch(e){}}}
+
+/* NORMALIZE */
+function normalizeThreat(t){const o={...t};const txt=[t.type,t.title,t.explanationShort].filter(Boolean).join(" ");const cls=CLASSIFIER(txt);if(cls?.isZircon){o.type="zircon";}else if(cls?.isJetDrone){o.type="jet_drone";}else if(cls?.isGeran5){o.type="geran5";}else if(cls?.isGeran){o.type=cls.type;}else if(cls&&!TYPE_META[t.type])o.type=cls.type;o._exactName=detectExactName(txt)||null;o._altitude=parseAltitude(t);o._falling=isFallingMessage(t.explanationShort||t.title||"");if(typeof t.count==="number"&&t.count>0)o._count=t.count;o._speed=resolveSpeedKmh(o.type,txt);return o;}
+function resolveHeading(t){if(t.heading!=null)return t.heading;if(t.velocity?.bearingDeg!=null)return t.velocity.bearingDeg;return null;}
+function resolveBaseTime(t){const iso=t.confirmedAt||t.updatedAt;if(iso){const ms=Date.parse(iso);if(!isNaN(ms))return ms;}return Date.now();}
+function isStale(bt){return(Date.now()-bt)>CONFIG.STALE_VISUAL_AFTER_HOURS*3600000;}
+function upsertThreat(raw){if(!threatLayer)return;try{const tx=normalizeThreat(raw);if(tx.lat==null||tx.lon==null)return;if(!inZone(tx.lat,tx.lon)){removeTrackInternal(tx.id);return;}let heading=resolveHeading(tx);if(heading==null)heading=bearingBetween(tx.lat,tx.lon,CONFIG.KYIV[0],CONFIG.KYIV[1]);const baseTime=resolveBaseTime(tx);const existing=tracks.get(tx.id);if(existing){existing.marker.setLatLng([tx.lat,tx.lon]);existing.threat=tx;}else{const marker=L.marker([tx.lat,tx.lon],{icon:makeIcon(tx,heading,0,0,false,false,null,null,false,false,false),zIndexOffset:800});marker.bindPopup(`<div class="popup-title type-${tx.type}">${esc(tx._exactName||typeLabel(tx))}</div><div class="popup-meta">${esc(tx.locality||tx.region||"—")}</div>`,CONFIG.POPUP_OPTS);marker.addTo(threatLayer);tracks.set(tx.id,{id:tx.id,marker,threat:tx,heading,_s:{lat:tx.lat,lon:tx.lon,hdg:heading,lastT:baseTime,spd:0}});scheduleFeedUpdate();}}catch(e){console.warn("upsertThreat",e);}}
+function syncThreats(list){const seen=new Set();for(const tx of list||[]){seen.add(tx.id);upsertThreat(tx);}for(const id of[...tracks.keys()])if(!seen.has(id))removeTrackInternal(id);}
+function removeTrackInternal(id){const tr=tracks.get(id);if(!tr)return;try{if(threatLayer)threatLayer.removeLayer(tr.marker);}catch(e){}tracks.delete(id);}
+function updateSmooth(tr,lat,lon,t,hdg){if(!tr._s){tr._s={lat,lon,hdg:hdg||0,lastT:t,spd:0};return;}tr._s.lat=lat;tr._s.lon=lon;tr._s.hdg=hdg||tr._s.hdg;tr._s.lastT=t;}
+function animate(){if(!animRunning||!map)return;const now=Date.now();for(const tr of tracks.values()){if(!tr._s)continue;const dt=Math.min((now-tr._s.lastT)/3600000,CONFIG.EXTRAPOLATION_HOURS);const dist=(tr._s.spd||180)*dt;const[lat,lon]=destPoint(tr._s.lat,tr._s.lon,tr._s.hdg,dist);tr.marker.setLatLng([lat,lon]);}rafId=requestAnimationFrame(animate);}
+function startAnim(){if(animRunning)return;animRunning=true;rafId=requestAnimationFrame(animate);}
+function stopAnim(){animRunning=false;if(rafId){cancelAnimationFrame(rafId);rafId=null;}}
+
+/* SUPPORT STUBS */
+function parseAltitude(t){if(typeof t.altitude==="number")return Math.round(t.altitude);return null;}
+function isFallingMessage(text){return /падає|падает|падінн|зниженн|снижен|уламк|обломк|збит|сбит/i.test(text||"");}
+function detectExactName(text){if(!text)return null;const t=text.toLowerCase();let m=t.match(/герань\s*-?\s*([2-5])\b/);if(m)return`Герань-${m[1]}`;if(/реактивн/.test(t)&&/(шахед|геран|бпла)/.test(t))return"Реактивний БПЛА";if(/циркон|zircon|3м22/.test(t))return"Циркон";if(/калибр|калібр/.test(t))return"Калібр";if(/кинжал|кінжал/.test(t))return"Кинжал";if(/іскандер|искандер/.test(t))return"Іскандер";if(/fpv|фпв/.test(t))return"FPV";if(/розвідник|разведчик/.test(t))return"Розвідник";return null;}
+const CLASSIFIER=(()=>{const HARD=[{re:/циркон|zircon/i,type:"zircon"},{re:/реактивн[а-яіїєґ]*\s*(шахед|геран|бпла|дрон)/i,type:"jet_drone"},{re:/герань\s*-?\s*5/i,type:"geran5"},{re:/герань\s*-?\s*4/i,type:"geran4"},{re:/герань\s*-?\s*3/i,type:"geran3"},{re:/герань\s*-?\s*2/i,type:"geran2"},{re:/балістик|баллистик|кинжал|іскандер|искандер|кн-?23/i,type:"ballistic"},{re:/калібр|калибр|х-?\s*101|х-?\s*555|крилат[аиі]?\s+ракет/i,type:"missile"}];const SOFT=[{re:/fpv|фпв/i,type:"fpv"},{re:/розвідник|разведчик|recon/i,type:"recon"},{re:/шахед|герань|бпла|дрон|безпілотник|реактив[а-яіїєґ]*/i,type:"uav"}];return function(t){t=t||"";for(const r of HARD)if(r.re.test(t))return{...r,hard:true};for(const r of SOFT)if(r.re.test(t))return{...r,hard:false};return null;};})();
+function parseEventTime(text,msgDate){if(!text)return null;const msgMs=msgDate?Date.parse(msgDate):null;let m=text.match(/(\d{1,3})\s*(?:хв|мин|min)\s*(?:назад|тому|раніше)/i);if(m)return(msgMs||Date.now())-parseInt(m[1],10)*60*1000;return null;}
+
+/* MESSAGE THREATS (упрощённая) */
+function detectThreatWarnings(text){if(!text)return[];const found=[];if(/(?:циркон|zircon)/i.test(text)&&/(?:пуск|залп|курс)/i.test(text))found.push({id:"zircon",label:"🚨 ZIRCON"});return found;}
+function upsertWarning(w,ch,ms){activeWarnings.set(w.id,{warning:w,lastSeen:ms,channels:new Set([ch])});}
+function getObservedPlace(text){if(!text)return null;const m=OBSERVED_RE.exec(text);if(!m)return null;const p=findPlaceInText(m[1].trim());return p?{...p,index:m.index,length:m[0].length}:null;}
+function getTargetPlace(text){if(!text)return null;const m=TARGET_RE.exec(text);if(!m)return null;const p=findPlaceInText(m[1].trim());return p?{...p,index:m.index,length:m[0].length}:null;}
+function syncMessageThreats(messages){const now=Date.now();for(const m of (messages||[])){const text=m.text||"";const ch=(m.channel||"unknown").replace(/^@/,"").toLowerCase();const msgMs=m.date?Date.parse(m.date):now;if(!text||text.length<8)continue;const warns=detectThreatWarnings(text);for(const w of warns)upsertWarning(w,ch,msgMs);const ext=extractPlaceAndType(text);if(ext){const place=ext.place;if(!inZone(place.lat,place.lon))continue;const key=`msg|${place.key}|${ext.cls.type}`;if(msgMarkers.has(key)){msgMarkers.get(key).lastSeen=msgMs;continue;}const heading=bearingBetween(place.lat,place.lon,CONFIG.KYIV[0],CONFIG.KYIV[1]);const marker=L.marker([place.lat,place.lon],{icon:makeIcon(ext.cls,heading,1,1,false,false,null,null,false,false,false),zIndexOffset:900});marker.bindPopup(`<div class="popup-title type-${ext.cls.type}">${esc(typeLabel(ext.cls))}</div><div class="popup-meta">${esc(place.name)}</div>`,CONFIG.POPUP_OPTS);marker.addTo(msgThreatLayer);msgMarkers.set(key,{id:key,marker,lastSeen:msgMs,cls:ext.cls,place});scheduleFeedUpdate();}}}
+function extractPlaceAndType(text){if(!text)return null;const cls=CLASSIFIER(text);if(!cls)return null;const obs=getObservedPlace(text);const tgt=getTargetPlace(text);const place=obs||tgt;if(!place)return null;return{place,cls,target:tgt};}
+
+/* TOP ALERT */
+function showTopAlert({kind,icon,title,place,meta}){const el=$("topAlert");if(!el)return;if(topAlertLastKind==="ballistic"&&kind!=="ballistic"){const since=Date.now()-lastBallisticAlarmAt;if(since<CONFIG.TOP_ALERT_BALLISTIC_TTL_MS)return;}topAlertLastKind=kind;el.className="top-alert show "+kind;const iconEl=$("topAlertIcon"),titleEl=$("topAlertTitle"),placeEl=$("topAlertPlace"),metaEl=$("topAlertMeta");if(iconEl)iconEl.textContent=icon||"🚨";if(titleEl)titleEl.textContent=title||"—";if(place){if(placeEl){placeEl.textContent=place;placeEl.style.display="block";}}else if(placeEl)placeEl.style.display="none";if(meta){if(metaEl){metaEl.textContent=meta;metaEl.style.display="block";}}else if(metaEl)metaEl.style.display="none";if(topAlertTimer)clearTimeout(topAlertTimer);const ttl=(kind==="ballistic")?CONFIG.TOP_ALERT_BALLISTIC_TTL_MS:CONFIG.TOP_ALERT_TTL_MS;topAlertTimer=setTimeout(()=>{hideTopAlert();},ttl);}
+function hideTopAlert(){const el=$("topAlert");if(el)el.classList.remove("show");topAlertLastKind=null;if(topAlertTimer){clearTimeout(topAlertTimer);topAlertTimer=null;}}
+
+/* AUDIO */
+function initAudio(){if(audioCtx)return audioCtx;try{const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return null;audioCtx=new Ctx();}catch(e){audioCtx=null;}return audioCtx;}
+function unlockAudio(){const c=initAudio();if(c&&c.state==="suspended")c.resume().catch(()=>{});}
+function playBell(){if(!audioCtx)return;const now=audioCtx.currentTime;[{f:880,g:.30,d:1.1},{f:1760,g:.14,d:.7}].forEach(p=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type="sine";o.frequency.setValueAtTime(p.f,now);g.gain.setValueAtTime(.0001,now);g.gain.exponentialRampToValueAtTime(p.g,now+.012);g.gain.exponentialRampToValueAtTime(.0001,now+p.d);o.connect(g);g.connect(audioCtx.destination);o.start(now);o.stop(now+p.d+.05);});}
+function playAlertSound(force){if(!CONFIG.SOUND_ENABLED)return;const now=Date.now();if(!force&&now-lastSoundAt<CONFIG.SOUND_COOLDOWN_MS)return;lastSoundAt=now;const c=initAudio();if(!c)return;try{if(c.state==="suspended")c.resume();playBell();}catch(e){}}
+function playSirenOnce(dur=3000){const c=initAudio();if(!c)return;if(c.state==="suspended")c.resume();const n=c.currentTime,d=dur/1000;const o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();o.type="sawtooth";o.frequency.setValueAtTime(440,n);o.frequency.linearRampToValueAtTime(880,n+d*.25);o.frequency.linearRampToValueAtTime(660,n+d*.6);o.frequency.linearRampToValueAtTime(440,n+d);f.type="bandpass";f.frequency.value=800;f.Q.value=3;g.gain.setValueAtTime(.0001,n);g.gain.linearRampToValueAtTime(.35,n+.1);g.gain.setValueAtTime(.35,n+d-.15);g.gain.linearRampToValueAtTime(.0001,n+d);o.connect(f);f.connect(g);g.connect(c.destination);o.start(n);o.stop(n+d+.05);}
+function flashSirenBtn(d){const b=$("sirenBtn");if(!b)return;b.classList.add("active");if(sirenActiveTimeout)clearTimeout(sirenActiveTimeout);sirenActiveTimeout=setTimeout(()=>b.classList.remove("active"),d||3000);}
+function triggerSirenSequence(dur=3000,times=1){const n=Math.max(1,times||1);flashSirenBtn(dur*n+(n-1)*250);for(let i=0;i<n;i++)setTimeout(()=>playSirenOnce(dur),i*(dur+250));}
+function triggerBallisticAlarm(reason){const now=Date.now();if(now-lastBallisticAlarmAt<CONFIG.BALLISTIC_SIREN_COOLDOWN_MS)return false;lastBallisticAlarmAt=now;triggerSirenSequence(3000,3);showTopAlert({kind:"ballistic",icon:"🚨",title:"УВАГА! ЗАГРОЗА БАЛІСТИКИ",place:"Пуск / залп балістики або Циркон",meta:"НЕГАЙНО ПРЯМУЙТЕ ДО УКРИТТЯ!"});return true;}
+
+/* FEED */
+function feedIconFor(item){const t=item.cls?.type||item.threat?.type||"";if(item.kind==="mass")return"📡";if(item.kind==="impact"||t==="impact")return"💥";if(item.kind==="strategic")return"✈️";if(t==="zircon"||t==="ballistic")return"🚨";if(t==="jet_drone")return"⚡";if(["geran2","geran3","geran4","geran5"].includes(t))return"🛸";if(["missile","kab"].includes(t))return"🚀";if(t==="recon")return"👁";if(["uav","fpv"].includes(t))return"🛸";return"📍";}
+function feedColorFor(item){const t=item.cls?.type||item.threat?.type||"";if(item.kind==="mass")return"#a78bfa";if(item.kind==="strategic")return"#facc15";if(item.kind==="impact"||t==="impact")return"#ff7c3b";if(t==="zircon"||t==="ballistic")return"#d94a8c";if(["jet_drone","geran2","geran3","geran4","geran5"].includes(t))return"#dc2626";if(["missile","kab"].includes(t))return"#e55757";return"#4ca9e8";}
+function collectFeedItems(){const out=[];for(const tr of tracks.values()){if(!tr.marker)continue;const ll=tr.marker.getLatLng();if(!ll)continue;out.push({kind:"api",id:"api:"+tr.threat.id,cls:{type:tr.threat.type,label:tr.threat._exactName||typeLabel(tr.threat)},name:tr.threat.locality||tr.threat.region||"—",lat:ll.lat,lng:ll.lng,ts:Date.now(),marker:tr.marker,markerLayer:threatLayer});}for(const o of msgMarkers.values()){if(!o.marker)continue;const ll=o.marker.getLatLng();if(!ll)continue;out.push({kind:"msg",id:o.id,cls:{type:o.cls.type,label:typeLabel(o.cls)},name:o.place?.name||"—",lat:ll.lat,lng:ll.lng,ts:o.lastSeen||Date.now(),marker:o.marker,markerLayer:msgThreatLayer});}if(massBannerActive){out.push({kind:"mass",id:"mass:banner",cls:{type:"mass",label:"МАСОВАНА АКТИВНІСТЬ"},name:$("massBannerTitle")?.textContent||"—",lat:null,lng:null,ts:Date.now()});}out.sort((a,b)=>b.ts-a.ts);return out;}
+function renderFeed(){const cont=$("events");const cnt=$("eventCount");if(!cont)return;const items=collectFeedItems();if(cnt)cnt.textContent=items.length+" подій";if(!items.length){cont.innerHTML=`<div class="panel-empty">Немає активних подій</div>`;return;}cont.innerHTML=items.slice(0,60).map((it,idx)=>{const color=feedColorFor(it);const icon=feedIconFor(it);const label=it.cls?.label||it.threat?.type||"";const time=new Date(it.ts).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"});let tags="";if(it.kind==="mass")tags+=`<span class="tag mass">📡 МАСОВАНЕ</span>`;return`<div class="event" data-feed-idx="${idx}"><div class="event-top"><div class="event-type" style="color:${color}"><span class="event-icon">${icon}</span>${esc(label)}</div><div class="event-time">${time}</div></div><div class="event-loc">📍 ${esc(it.name||"—")}</div>${tags?`<div class="event-meta">${tags}</div>`:''}</div>`;}).join("");cont.querySelectorAll(".event").forEach(el=>{el.addEventListener("click",()=>{const idx=+el.getAttribute("data-feed-idx");const it=items[idx];if(!it)return;if(it.lat!=null)map.setView([it.lat,it.lng],12,{animate:true});});});}
+function scheduleFeedUpdate(){if(feedUpdateTimer)return;feedUpdateTimer=setTimeout(()=>{feedUpdateTimer=null;renderFeed();},300);}
+
+/* STRATEGIC (заглушки) */
+function rebuildStrategicPanel(){const panel=$("strategicPanel");if(!panel)return;if(!strategicVisible||strategicActivity.size===0)panel.classList.remove("show");}
+function removeStrategicKey(key){strategicActivity.delete(key);const m=strategicMarkers.get(key);if(m&&strategicLayer)try{strategicLayer.removeLayer(m.marker);}catch(e){}strategicMarkers.delete(key);}
+
+/* ============================================================
+   EVENT LISTENERS / INIT
+============================================================ */
+$("btnRefresh").addEventListener("click",()=>{unlockAudio();if(wsConnected&&ws){try{ws.close();}catch(e){}wsConnect();}else startRestPolling();showToast("Оновлення…");});
+$("btnClear").addEventListener("click",()=>{unlockAudio();clearAll();showToast("Очищено");});
+$("btnAIExplain").addEventListener("click",()=>{unlockAudio();showAIExplain();});
+$("aiModalClose").addEventListener("click",hideAIExplain);
+$("aiModalBackdrop").addEventListener("click",e=>{if(e.target.id==="aiModalBackdrop")hideAIExplain();});
+$("aiModalCopy").addEventListener("click",async()=>{try{await navigator.clipboard.writeText($("aiModalBody").textContent||"");$("aiModalCopy").textContent="✅";setTimeout(()=>{$("aiModalCopy").textContent="📋 Копіювати";},1500);}catch(e){}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("aiModalBackdrop").classList.contains("show"))hideAIExplain();});
+$("panelHeader").addEventListener("click",()=>{const p=$("panel");if(p)p.classList.toggle("collapsed");});
+$("topAlertClose").addEventListener("click",()=>hideTopAlert());
+$("massBannerClose").addEventListener("click",()=>hideMassBanner());
+$("strategicPanelClose").addEventListener("click",()=>{$("strategicPanel").classList.remove("show");});
+(function(){const b=$("soundToggle");if(!b)return;function update(){b.textContent=CONFIG.SOUND_ENABLED?"🔔":"🔕";b.className="sound-btn "+(CONFIG.SOUND_ENABLED?"on":"muted");}update();let last=0;b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();unlockAudio();const n=Date.now();playAlertSound(true);if(n-last<500){CONFIG.SOUND_ENABLED=!CONFIG.SOUND_ENABLED;update();showToast(CONFIG.SOUND_ENABLED?"🔔 увімк":"🔕 вимк");last=0;}else{last=n;showToast("🔔 тест");}});})();
+(function(){const b=$("sirenBtn");if(!b)return;let last=0;b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();unlockAudio();const n=Date.now();if(n-last<500){triggerSirenSequence(3000,3);showToast("🚨 3× сирена");last=0;}else{playSirenOnce(3000);flashSirenBtn(3000);showToast("🚨 1×");last=n;}});})();
+(function(){const b=$("btnColorToggle");if(!b)return;function update(){const c=UAV_COLORS[uavColorIdx];b.style.background=c.hex;b.style.borderColor=(c.id==="white")?"rgba(148,163,184,.5)":"rgba(0,0,0,.35)";b.style.color=(c.id==="white"||c.id==="yellow")?"#1e293b":"#fff";}update();b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();uavColorIdx=(uavColorIdx+1)%UAV_COLORS.length;saveUavColor();update();refreshAllIcons();showToast("🎨 БПЛА: "+UAV_COLORS[uavColorIdx].name);unlockAudio();});})();
+(function(){const b=$("btnRingsToggle");if(!b||!map)return;function apply(){if(ringsVisible){if(!map.hasLayer(ringsLayer))ringsLayer.addTo(map);b.classList.add("on");b.classList.remove("off");}else{if(map.hasLayer(ringsLayer))map.removeLayer(ringsLayer);b.classList.add("off");b.classList.remove("on");}}apply();b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();ringsVisible=!ringsVisible;try{localStorage.setItem(RINGS_KEY,ringsVisible?"1":"0");}catch(e2){}apply();showToast(ringsVisible?"🎯 Кільця УВІМК":"🎯 Кільця ВИКЛ");unlockAudio();});})();
+(function(){const b=$("btnMapToggle");if(!b||!map)return;b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();unlockAudio();if(currentBase==="osm"){if(osmLayer)map.removeLayer(osmLayer);baseSat.addTo(map);currentBase="sat";b.classList.add("on");showToast("🛰 Супутник");}else{map.removeLayer(baseSat);osmLayer=L.tileLayer(CONFIG.TILE_URL,{maxZoom:19,attribution:CONFIG.TILE_ATTR,subdomains:"abcd"});osmLayer.addTo(map);currentBase="osm";b.classList.remove("on");showToast("🗺 Схема");}});})();
+(function(){const b=$("btnSettlements");if(!b)return;if(settlementsVisible)b.classList.add("on");b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();unlockAudio();toggleSettlementsLayer();});})();
+(function(){const b=$("btnStrategic");if(!b)return;if(strategicVisible)b.classList.add("on");b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();unlockAudio();toggleStrategicLayer();});})();
+(function(){const b=$("btnInfra");if(!b)return;b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();unlockAudio();cycleInfraMode();});})();
+(function(){const b=$("btnPower");if(!b)return;if(powerVisible)b.classList.add("on");b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();unlockAudio();togglePowerLayer();});})();
+(function(){const b=$("btnMass");if(!b)return;b.classList.toggle("on",massBannerActive);b.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();unlockAudio();if(massBannerActive)hideMassBanner();else showToast("📡 Очікування масових пусків…");});})();
+document.addEventListener("visibilitychange",()=>{if(document.hidden){stopRestPolling();stopAnim();}else{if(!wsConnected)startRestPolling();startAnim();unlockAudio();}});
+
+(async function init(){
+  try{
+    setStatus("warn","ЗАГРУЗКА…");
+    const ctrl=new AbortController();
+    loadAlertGeo(ctrl.signal);
+    wsConnect();
+    fetchMessages();
+    setInterval(fetchMessages,5000);
+    startAnim();
+    renderFeed();
+    setInterval(renderFeed,8000);
+    setTimeout(()=>unlockAudio(),500);
+    updateSettlementsVisibility();
+    if(strategicVisible&&strategicLayer&&map&&!map.hasLayer(strategicLayer))strategicLayer.addTo(map);
+    const b=$("btnInfra");
+    if(b){
+      b.classList.remove("on","infrastructure","energy","incidents");
+      if(infraMode===1)b.classList.add("infrastructure");
+      else if(infraMode===2)b.classList.add("energy");
+      else if(infraMode===3)b.classList.add("on");
+    }
+    if(infraMode>0)rebuildInfraLayer();
+    if(powerVisible)rebuildPowerLayer();
+    window.findNearestInfra=findNearestInfra;
+    window.KYIV_INFRA={bridges:kyivBridges,energy:energyDatabase,infrastructure:infrastructureObjects,power:powerSubstations};
+  }catch(e){showErr("init: "+(e&&e.message||e));}
+})();
+</script>
+</body>
+</html>
